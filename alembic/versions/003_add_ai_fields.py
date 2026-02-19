@@ -1,7 +1,7 @@
 """Add AI fields to ticket
 
 Revision ID: 003_add_ai_fields
-Revises: 002_add_channel
+Revises: 002
 Create Date: 2026-02-19
 
 """
@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '003_add_ai_fields'
-down_revision = '002_add_channel'
+down_revision = '002'
 branch_labels = None
 depends_on = None
 
