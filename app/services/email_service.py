@@ -771,11 +771,28 @@ async def process_emails():
     if not emails:
         return
     
+    # Get the system's own email address to filter out self-sent emails
+    system_email = settings.effective_from_email.lower()
+    
     async with async_session_factory() as db:
         service = EmailService(db)
         
         for email_data in emails:
             try:
+                # Skip emails sent by the system itself (prevents loops)
+                from_address = email_data.get("from_address", "").lower()
+                message_id = email_data.get("message_id", "")
+                
+                # Check if email is from our own system
+                if from_address == system_email:
+                    logger.info("Skipping self-sent email from %s", from_address)
+                    continue
+                
+                # Check if message ID indicates it's from our system
+                if "@fincas-agent>" in message_id:
+                    logger.info("Skipping system-generated email: %s", message_id)
+                    continue
+                
                 # Check if already processed
                 result = await db.execute(
                     select(Email).where(Email.message_id == email_data["message_id"])
