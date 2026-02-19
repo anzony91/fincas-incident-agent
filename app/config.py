@@ -32,13 +32,28 @@ class Settings(BaseSettings):
     imap_user: str = ""
     imap_password: str = ""
     
-    # SMTP Configuration
+    # SMTP Configuration (defaults to IMAP credentials for Gmail)
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
     from_email: str = ""
     from_name: str = "Administración de Fincas"
+    
+    @property
+    def effective_smtp_user(self) -> str:
+        """Get SMTP user, falling back to IMAP user"""
+        return self.smtp_user or self.imap_user
+    
+    @property
+    def effective_smtp_password(self) -> str:
+        """Get SMTP password, falling back to IMAP password"""
+        return self.smtp_password or self.imap_password
+    
+    @property
+    def effective_from_email(self) -> str:
+        """Get from email, falling back to IMAP user"""
+        return self.from_email or self.imap_user
     
     # Worker settings
     poll_interval_seconds: int = 60

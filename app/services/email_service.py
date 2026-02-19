@@ -25,6 +25,7 @@ from app.config import get_settings
 from app.database import async_session_factory
 from app.models.attachment import Attachment
 from app.models.email import Email, EmailDirection
+from app.models.event import Event
 from app.models.ticket import Ticket, TicketStatus
 from app.schemas import TicketCreate
 from app.services.classifier_service import ClassifierService
@@ -57,7 +58,7 @@ class EmailService:
         """Send an email via SMTP"""
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = f"{settings.from_name} <{settings.from_email}>"
+        msg["From"] = f"{settings.from_name} <{settings.effective_from_email}>"
         msg["To"] = to
         
         if cc:
@@ -79,19 +80,28 @@ class EmailService:
         if body_html:
             msg.attach(MIMEText(body_html, "html", "utf-8"))
         
+        # Check SMTP credentials
+        smtp_user = settings.effective_smtp_user
+        smtp_password = settings.effective_smtp_password
+        
+        if not smtp_user or not smtp_password:
+            logger.error("SMTP credentials not configured - cannot send email")
+            raise ValueError("SMTP credentials not configured")
+        
         # Send via SMTP
         try:
+            logger.info("Sending email to %s via %s:%d", to, settings.smtp_host, settings.smtp_port)
             await aiosmtplib.send(
                 msg,
                 hostname=settings.smtp_host,
                 port=settings.smtp_port,
-                username=settings.smtp_user,
-                password=settings.smtp_password,
+                username=smtp_user,
+                password=smtp_password,
                 start_tls=True,
             )
             logger.info("Email sent successfully to %s", to)
         except Exception as e:
-            logger.error("Failed to send email: %s", str(e))
+            logger.error("Failed to send email to %s: %s", to, str(e))
             raise
         
         # Store outbound email if ticket provided
@@ -102,7 +112,7 @@ class EmailService:
                 subject=subject,
                 body_text=body_text,
                 body_html=body_html,
-                from_address=settings.from_email,
+                from_address=settings.effective_from_email,
                 from_name=settings.from_name,
                 to_address=to,
                 cc_addresses=", ".join(cc) if cc else None,
@@ -238,8 +248,16 @@ class EmailService:
             await self._save_attachments(email_record, attachments_data, ticket.ticket_code)
         
         # If info is incomplete, send follow-up email asking for more info
-        if not analysis.has_complete_info and analysis.follow_up_questions:
-            await self._send_info_request(ticket, analysis, email_record.message_id)
+        if not analysis.has_complete_info:
+            # Ensure we have follow-up questions
+            if not analysis.follow_up_questions and analysis.missing_fields:
+                analysis.follow_up_questions = [f"¿Podría indicarnos {m.lower()}?" for m in analysis.missing_fields]
+            
+            if analysis.follow_up_questions or analysis.missing_fields:
+                logger.info("Ticket %s needs more info, sending request email", ticket.ticket_code)
+                await self._send_info_request(ticket, analysis, email_record.message_id)
+            else:
+                logger.warning("Ticket %s marked incomplete but no questions/fields to ask", ticket.ticket_code)
         
         return ticket, email_record
     
@@ -287,6 +305,10 @@ class EmailService:
         reply_to_message_id: str,
     ) -> None:
         """Send email requesting missing information"""
+        logger.info("Preparing info request email for ticket %s", ticket.ticket_code)
+        logger.info("Missing fields: %s", analysis.missing_fields)
+        logger.info("Follow-up questions: %s", analysis.follow_up_questions)
+        
         try:
             # Generate follow-up email content
             subject, body = await self.ai_agent.generate_follow_up_email(
@@ -295,12 +317,14 @@ class EmailService:
                 reporter_name=ticket.reporter_name,
             )
             
+            logger.info("Generated email - Subject: %s", subject)
+            
             # Ensure subject includes ticket code
             if ticket.ticket_code not in subject:
                 subject = f"[{ticket.ticket_code}] {subject}"
             
             # Send the email
-            await self.send_email(
+            email_record = await self.send_email(
                 to=ticket.reporter_email,
                 subject=subject,
                 body_text=body,
@@ -309,10 +333,33 @@ class EmailService:
                 references=reply_to_message_id,
             )
             
-            logger.info("Sent info request email for ticket %s", ticket.ticket_code)
+            # Create event for tracking
+            event = Event(
+                ticket_id=ticket.id,
+                event_type="INFO_REQUESTED",
+                description=f"Solicitud automática de información enviada. Campos faltantes: {', '.join(analysis.missing_fields[:3])}",
+                created_by="AI Agent"
+            )
+            self.db.add(event)
+            await self.db.commit()
+            
+            logger.info("Sent info request email for ticket %s to %s", ticket.ticket_code, ticket.reporter_email)
             
         except Exception as e:
-            logger.error("Failed to send info request for ticket %s: %s", ticket.ticket_code, str(e))
+            logger.error("Failed to send info request for ticket %s: %s", ticket.ticket_code, str(e), exc_info=True)
+            
+            # Create event noting the failure
+            try:
+                event = Event(
+                    ticket_id=ticket.id,
+                    event_type="EMAIL_FAILED",
+                    description=f"Error al enviar solicitud de información: {str(e)[:200]}",
+                    created_by="AI Agent"
+                )
+                self.db.add(event)
+                await self.db.commit()
+            except Exception:
+                pass  # Don't fail if we can't create the event
     
     async def _process_info_response(
         self,
