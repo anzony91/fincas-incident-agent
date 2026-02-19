@@ -237,8 +237,8 @@ async def update_ticket_status(
             ticket.status = new_status
             ticket.updated_at = datetime.utcnow()
             
-            if new_status == TicketStatus.CLOSED and not ticket.resolved_at:
-                ticket.resolved_at = datetime.utcnow()
+            if new_status == TicketStatus.CLOSED and not ticket.closed_at:
+                ticket.closed_at = datetime.utcnow()
             
             # Create event
             event = Event(

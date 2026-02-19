@@ -48,6 +48,15 @@ class Priority(str, enum.Enum):
     LOW = "LOW"
 
 
+class Channel(str, enum.Enum):
+    """Input channel enum"""
+    EMAIL = "EMAIL"
+    WHATSAPP = "WHATSAPP"
+    SMS = "SMS"
+    WEB = "WEB"
+    PHONE = "PHONE"
+
+
 class Ticket(Base):
     """Ticket model for incident tracking"""
     
@@ -70,8 +79,12 @@ class Ticket(Base):
     )
     reporter_email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     reporter_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    reporter_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     assigned_provider_id: Mapped[Optional[int]] = mapped_column(nullable=True)
     community_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    channel: Mapped[Channel] = mapped_column(
+        Enum(Channel), default=Channel.EMAIL, nullable=False
+    )
     
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

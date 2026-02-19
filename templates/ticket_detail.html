@@ -9,18 +9,18 @@
             <a href="/dashboard/tickets" class="text-sm text-gray-500 hover:text-primary mb-2 inline-block">
                 ← Volver a tickets
             </a>
-            <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-3">
+            <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-3 flex-wrap">
                 <span class="font-mono text-primary">{{ ticket.ticket_code }}</span>
-                <span class="status-{{ ticket.status }} px-3 py-1 text-sm font-semibold rounded-full">
-                    {{ ticket.status | replace('_', ' ') }}
+                <span class="status-{{ ticket.status.value }} px-3 py-1 text-sm font-semibold rounded-full">
+                    {{ ticket.status.value | replace('_', ' ') }}
                 </span>
             </h1>
             <p class="text-lg text-gray-700 mt-2">{{ ticket.subject }}</p>
         </div>
         
-        <div class="flex gap-2 items-center">
-            <span class="priority-{{ ticket.priority }} px-3 py-1 text-sm font-semibold rounded">
-                Prioridad: {{ ticket.priority }}
+        <div class="flex gap-2 items-center flex-wrap">
+            <span class="priority-{{ ticket.priority.value }} px-3 py-1 text-sm font-semibold rounded">
+                {{ ticket.priority.value }}
             </span>
             <form method="POST" action="/dashboard/tickets/{{ ticket.id }}/delete" 
                   onsubmit="return confirm('¿Estás seguro de que quieres eliminar este ticket?');">
@@ -34,54 +34,113 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Main Content -->
         <div class="lg:col-span-2 space-y-6">
+            <!-- Info Summary Card -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <!-- Channel -->
+                    <div class="text-center p-3 bg-gray-50 rounded-lg">
+                        <div class="text-2xl mb-1">
+                            {% if ticket.channel and ticket.channel.value == 'EMAIL' %}📧
+                            {% elif ticket.channel and ticket.channel.value == 'WHATSAPP' %}💬
+                            {% elif ticket.channel and ticket.channel.value == 'SMS' %}📱
+                            {% elif ticket.channel and ticket.channel.value == 'WEB' %}🌐
+                            {% elif ticket.channel and ticket.channel.value == 'PHONE' %}📞
+                            {% else %}📧{% endif %}
+                        </div>
+                        <div class="text-xs text-gray-500">Canal</div>
+                        <div class="text-sm font-semibold text-gray-900">{{ ticket.channel.value if ticket.channel else 'EMAIL' }}</div>
+                    </div>
+                    <!-- Category -->
+                    <div class="text-center p-3 bg-gray-50 rounded-lg">
+                        <div class="text-2xl mb-1">
+                            {% if ticket.category.value == 'WATER' %}💧
+                            {% elif ticket.category.value == 'ELEVATOR' %}🛗
+                            {% elif ticket.category.value == 'ELECTRICITY' %}⚡
+                            {% elif ticket.category.value == 'GARAGE_DOOR' %}🚗
+                            {% elif ticket.category.value == 'CLEANING' %}🧹
+                            {% elif ticket.category.value == 'SECURITY' %}🔒
+                            {% else %}📋{% endif %}
+                        </div>
+                        <div class="text-xs text-gray-500">Categoría</div>
+                        <div class="text-sm font-semibold text-gray-900">{{ ticket.category.value | replace('_', ' ') }}</div>
+                    </div>
+                    <!-- Priority -->
+                    <div class="text-center p-3 bg-gray-50 rounded-lg">
+                        <div class="text-2xl mb-1">
+                            {% if ticket.priority.value == 'URGENT' %}🔴
+                            {% elif ticket.priority.value == 'HIGH' %}🟠
+                            {% elif ticket.priority.value == 'MEDIUM' %}🟡
+                            {% else %}🟢{% endif %}
+                        </div>
+                        <div class="text-xs text-gray-500">Prioridad</div>
+                        <div class="text-sm font-semibold text-gray-900">{{ ticket.priority.value }}</div>
+                    </div>
+                    <!-- Status -->
+                    <div class="text-center p-3 bg-gray-50 rounded-lg">
+                        <div class="text-2xl mb-1">
+                            {% if ticket.status.value == 'NEW' %}🆕
+                            {% elif ticket.status.value == 'IN_PROGRESS' %}⚙️
+                            {% elif ticket.status.value == 'CLOSED' %}✅
+                            {% elif ticket.status.value == 'ESCALATED' %}⚠️
+                            {% else %}📌{% endif %}
+                        </div>
+                        <div class="text-xs text-gray-500">Estado</div>
+                        <div class="text-sm font-semibold text-gray-900">{{ ticket.status.value | replace('_', ' ') }}</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Description -->
             <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-lg font-semibold text-gray-900 mb-4">Descripción</h2>
-                <div class="prose max-w-none text-gray-700 whitespace-pre-wrap">{{ ticket.description or 'Sin descripción' }}</div>
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">📝 Descripción del Incidente</h2>
+                <div class="prose max-w-none text-gray-700 whitespace-pre-wrap bg-gray-50 p-4 rounded-lg">{{ ticket.description or 'Sin descripción disponible' }}</div>
             </div>
 
-            <!-- Change Status Form -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-lg font-semibold text-gray-900 mb-4">Cambiar Estado</h2>
-                <form method="POST" action="/dashboard/tickets/{{ ticket.id }}/status" class="flex gap-4 items-end">
-                    <div class="flex-1">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Nuevo Estado</label>
-                        <select name="status" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
-                            {% for s in statuses %}
-                            <option value="{{ s }}" {% if ticket.status == s %}selected{% endif %}>{{ s | replace('_', ' ') }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
-                        Actualizar
-                    </button>
-                </form>
-            </div>
+            <!-- Actions -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Change Status Form -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">🔄 Cambiar Estado</h2>
+                    <form method="POST" action="/dashboard/tickets/{{ ticket.id }}/status" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nuevo Estado</label>
+                            <select name="status" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                {% for s in statuses %}
+                                <option value="{{ s }}" {% if ticket.status.value == s %}selected{% endif %}>{{ s | replace('_', ' ') }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="w-full px-4 py-2 bg-primary text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                            Actualizar Estado
+                        </button>
+                    </form>
+                </div>
 
-            <!-- Assign Provider Form -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-lg font-semibold text-gray-900 mb-4">Asignar Proveedor</h2>
-                <form method="POST" action="/dashboard/tickets/{{ ticket.id }}/assign" class="flex gap-4 items-end">
-                    <div class="flex-1">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
-                        <select name="provider_id" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
-                            <option value="">Sin asignar</option>
-                            {% for p in providers %}
-                            <option value="{{ p.id }}" {% if ticket.assigned_provider_id == p.id %}selected{% endif %}>
-                                {{ p.name }} ({{ p.category | replace('_', ' ') }})
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2">
-                        Asignar
-                    </button>
-                </form>
+                <!-- Assign Provider Form -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">👷 Asignar Proveedor</h2>
+                    <form method="POST" action="/dashboard/tickets/{{ ticket.id }}/assign" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
+                            <select name="provider_id" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="">Sin asignar</option>
+                                {% for p in providers %}
+                                <option value="{{ p.id }}" {% if ticket.assigned_provider_id == p.id %}selected{% endif %}>
+                                    {{ p.name }} ({{ p.category | replace('_', ' ') }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2">
+                            Asignar Proveedor
+                        </button>
+                    </form>
+                </div>
             </div>
 
             <!-- Timeline / Events -->
             <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-lg font-semibold text-gray-900 mb-4">Historial de Eventos</h2>
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">📋 Historial de Eventos</h2>
                 
                 {% if events %}
                 <div class="flow-root">
@@ -99,6 +158,7 @@
                                             {% elif event.event_type == 'PROVIDER_ASSIGNED' %}bg-green-500
                                             {% elif event.event_type == 'EMAIL_RECEIVED' %}bg-blue-500
                                             {% elif event.event_type == 'EMAIL_SENT' %}bg-purple-500
+                                            {% elif event.event_type == 'CREATED' %}bg-indigo-500
                                             {% else %}bg-gray-400{% endif %}">
                                             {% if event.event_type == 'STATUS_CHANGED' %}
                                             <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -145,34 +205,49 @@
 
         <!-- Sidebar -->
         <div class="space-y-6">
-            <!-- Info Card -->
+            <!-- Reporter Info Card -->
             <div class="bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">Información</h3>
-                <dl class="space-y-4">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">👤 Reportado por</h3>
+                <dl class="space-y-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-400">👤</span>
+                        <span class="text-sm text-gray-900">{{ ticket.reporter_name or 'Sin nombre' }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-400">✉️</span>
+                        <a href="mailto:{{ ticket.reporter_email }}" class="text-sm text-primary hover:underline">{{ ticket.reporter_email }}</a>
+                    </div>
+                    {% if ticket.reporter_phone %}
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-400">📞</span>
+                        <a href="tel:{{ ticket.reporter_phone }}" class="text-sm text-primary hover:underline">{{ ticket.reporter_phone }}</a>
+                    </div>
+                    {% endif %}
+                    {% if ticket.community_name %}
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-400">🏢</span>
+                        <span class="text-sm text-gray-900">{{ ticket.community_name }}</span>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+
+            <!-- Dates Card -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">📅 Fechas</h3>
+                <dl class="space-y-3">
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Categoría</dt>
-                        <dd class="mt-1 text-sm text-gray-900">
-                            {% if ticket.category == 'WATER' %}💧{% elif ticket.category == 'ELEVATOR' %}🛗{% elif ticket.category == 'ELECTRICITY' %}⚡{% elif ticket.category == 'GARAGE_DOOR' %}🚗{% elif ticket.category == 'CLEANING' %}🧹{% elif ticket.category == 'SECURITY' %}🔒{% else %}📋{% endif %}
-                            {{ ticket.category | replace('_', ' ') }}
-                        </dd>
+                        <dt class="text-xs text-gray-500 uppercase">Creado</dt>
+                        <dd class="text-sm font-medium text-gray-900">{{ ticket.created_at.strftime('%d/%m/%Y %H:%M') }}</dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Reportado por</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ ticket.reporter_name or 'Sin nombre' }}</dd>
-                        <dd class="text-sm text-gray-500">{{ ticket.reporter_email }}</dd>
+                        <dt class="text-xs text-gray-500 uppercase">Última actualización</dt>
+                        <dd class="text-sm font-medium text-gray-900">{{ ticket.updated_at.strftime('%d/%m/%Y %H:%M') }}</dd>
                     </div>
+                    {% if ticket.closed_at %}
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Creado</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ ticket.created_at.strftime('%d/%m/%Y %H:%M') }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-sm font-medium text-gray-500">Actualizado</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ ticket.updated_at.strftime('%d/%m/%Y %H:%M') }}</dd>
-                    </div>
-                    {% if ticket.resolved_at %}
-                    <div>
-                        <dt class="text-sm font-medium text-gray-500">Resuelto</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ ticket.resolved_at.strftime('%d/%m/%Y %H:%M') }}</dd>
+                        <dt class="text-xs text-gray-500 uppercase">Cerrado</dt>
+                        <dd class="text-sm font-medium text-green-600">{{ ticket.closed_at.strftime('%d/%m/%Y %H:%M') }}</dd>
                     </div>
                     {% endif %}
                 </dl>
@@ -180,7 +255,7 @@
 
             <!-- Assigned Provider -->
             <div class="bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">Proveedor Asignado</h3>
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">👷 Proveedor Asignado</h3>
                 {% if ticket.assigned_provider %}
                 <div class="space-y-2">
                     <p class="font-medium text-gray-900">{{ ticket.assigned_provider.name }}</p>
@@ -199,20 +274,21 @@
 
             <!-- Related Emails -->
             <div class="bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">Emails Relacionados</h3>
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">📧 Comunicaciones</h3>
                 {% if emails %}
                 <ul class="space-y-3">
                     {% for email in emails %}
                     <li class="border-l-4 {% if email.direction == 'INBOUND' %}border-blue-400{% else %}border-green-400{% endif %} pl-3 py-1">
                         <p class="text-sm font-medium text-gray-900 truncate">{{ email.subject }}</p>
                         <p class="text-xs text-gray-500">
-                            {{ email.direction }} · {{ email.received_at.strftime('%d/%m %H:%M') }}
+                            {% if email.direction == 'INBOUND' %}📥 Recibido{% else %}📤 Enviado{% endif %}
+                            · {{ email.received_at.strftime('%d/%m %H:%M') }}
                         </p>
                     </li>
                     {% endfor %}
                 </ul>
                 {% else %}
-                <p class="text-gray-500 text-sm">Sin emails relacionados</p>
+                <p class="text-gray-500 text-sm">Sin comunicaciones registradas</p>
                 {% endif %}
             </div>
         </div>

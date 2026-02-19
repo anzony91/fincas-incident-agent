@@ -100,18 +100,18 @@
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="text-sm text-gray-700">
-                                {% if ticket.category == 'WATER' %}💧{% elif ticket.category == 'ELEVATOR' %}🛗{% elif ticket.category == 'ELECTRICITY' %}⚡{% elif ticket.category == 'GARAGE_DOOR' %}🚗{% elif ticket.category == 'CLEANING' %}🧹{% elif ticket.category == 'SECURITY' %}🔒{% else %}📋{% endif %}
-                                {{ ticket.category | replace('_', ' ') }}
+                                {% if ticket.category.value == 'WATER' %}💧{% elif ticket.category.value == 'ELEVATOR' %}🛗{% elif ticket.category.value == 'ELECTRICITY' %}⚡{% elif ticket.category.value == 'GARAGE_DOOR' %}🚗{% elif ticket.category.value == 'CLEANING' %}🧹{% elif ticket.category.value == 'SECURITY' %}🔒{% else %}📋{% endif %}
+                                {{ ticket.category.value | replace('_', ' ') }}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="priority-{{ ticket.priority }} px-2 py-1 text-xs font-semibold rounded">
-                                {{ ticket.priority }}
+                            <span class="priority-{{ ticket.priority.value }} px-2 py-1 text-xs font-semibold rounded">
+                                {{ ticket.priority.value }}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="status-{{ ticket.status }} px-2 py-1 text-xs font-semibold rounded-full">
-                                {{ ticket.status | replace('_', ' ') }}
+                            <span class="status-{{ ticket.status.value }} px-2 py-1 text-xs font-semibold rounded-full">
+                                {{ ticket.status.value | replace('_', ' ') }}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
