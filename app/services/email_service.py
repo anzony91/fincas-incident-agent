@@ -90,14 +90,21 @@ class EmailService:
         
         # Send via SMTP
         try:
-            logger.info("Sending email to %s via %s:%d", to, settings.smtp_host, settings.smtp_port)
+            logger.info("Sending email to %s via %s:%d (TLS=%s)", to, settings.smtp_host, settings.smtp_port, settings.smtp_use_tls)
+            
+            # Port 465 uses direct TLS, port 587 uses STARTTLS
+            use_tls = settings.smtp_use_tls and settings.smtp_port == 465
+            start_tls = not use_tls and settings.smtp_port == 587
+            
             await aiosmtplib.send(
                 msg,
                 hostname=settings.smtp_host,
                 port=settings.smtp_port,
                 username=smtp_user,
                 password=smtp_password,
-                start_tls=True,
+                use_tls=use_tls,
+                start_tls=start_tls,
+                timeout=settings.smtp_timeout,
             )
             logger.info("Email sent successfully to %s", to)
         except Exception as e:

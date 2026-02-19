@@ -33,8 +33,11 @@ class Settings(BaseSettings):
     imap_password: str = ""
     
     # SMTP Configuration (defaults to IMAP credentials for Gmail)
+    # Port 465 with SSL works better in cloud environments than 587 with STARTTLS
     smtp_host: str = "smtp.gmail.com"
-    smtp_port: int = 587
+    smtp_port: int = 465
+    smtp_use_tls: bool = True  # Use SSL/TLS directly (port 465)
+    smtp_timeout: int = 30
     smtp_user: str = ""
     smtp_password: str = ""
     from_email: str = ""
