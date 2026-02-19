@@ -195,7 +195,7 @@ async def ticket_detail(
     
     # Get all providers for assignment
     providers_result = await db.execute(
-        select(Provider).where(Provider.active == True).order_by(Provider.name)
+        select(Provider).where(Provider.is_active == True).order_by(Provider.name)
     )
     providers = providers_result.scalars().all()
     

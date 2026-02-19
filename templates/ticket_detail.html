@@ -126,7 +126,7 @@
                                 <option value="">Sin asignar</option>
                                 {% for p in providers %}
                                 <option value="{{ p.id }}" {% if ticket.assigned_provider_id == p.id %}selected{% endif %}>
-                                    {{ p.name }} ({{ p.category | replace('_', ' ') }})
+                                    {{ p.name }} ({{ p.category.value | replace('_', ' ') }})
                                 </option>
                                 {% endfor %}
                             </select>
@@ -259,12 +259,12 @@
                 {% if ticket.assigned_provider %}
                 <div class="space-y-2">
                     <p class="font-medium text-gray-900">{{ ticket.assigned_provider.name }}</p>
-                    <p class="text-sm text-gray-500">{{ ticket.assigned_provider.category | replace('_', ' ') }}</p>
-                    {% if ticket.assigned_provider.contact_phone %}
-                    <p class="text-sm text-gray-700">📞 {{ ticket.assigned_provider.contact_phone }}</p>
+                    <p class="text-sm text-gray-500">{{ ticket.assigned_provider.category.value | replace('_', ' ') }}</p>
+                    {% if ticket.assigned_provider.phone %}
+                    <p class="text-sm text-gray-700">📞 {{ ticket.assigned_provider.phone }}</p>
                     {% endif %}
-                    {% if ticket.assigned_provider.contact_email %}
-                    <p class="text-sm text-gray-700">✉️ {{ ticket.assigned_provider.contact_email }}</p>
+                    {% if ticket.assigned_provider.email %}
+                    <p class="text-sm text-gray-700">✉️ {{ ticket.assigned_provider.email }}</p>
                     {% endif %}
                 </div>
                 {% else %}
