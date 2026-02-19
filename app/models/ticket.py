@@ -3,9 +3,9 @@ Ticket model and enums
 """
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from sqlalchemy import DateTime, Enum, String, Text, func
+from sqlalchemy import DateTime, Enum, String, Text, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -85,6 +85,13 @@ class Ticket(Base):
     channel: Mapped[Channel] = mapped_column(
         Enum(Channel), default=Channel.EMAIL, nullable=False
     )
+    
+    # Location details
+    address: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    location_detail: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    
+    # AI analysis context (stores conversation state for info gathering)
+    ai_context: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

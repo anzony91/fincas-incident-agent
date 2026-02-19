@@ -3,6 +3,7 @@ Email Service - IMAP/SMTP handling for email operations
 """
 import asyncio
 import email
+import json
 import logging
 import os
 import re
@@ -11,7 +12,7 @@ from datetime import datetime, timezone
 from email.header import decode_header
 from email.utils import parseaddr, parsedate_to_datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import aiosmtplib
 from email.mime.multipart import MIMEMultipart
@@ -24,10 +25,11 @@ from app.config import get_settings
 from app.database import async_session_factory
 from app.models.attachment import Attachment
 from app.models.email import Email, EmailDirection
-from app.models.ticket import Ticket
+from app.models.ticket import Ticket, TicketStatus
 from app.schemas import TicketCreate
 from app.services.classifier_service import ClassifierService
 from app.services.ticket_service import TicketService
+from app.services.ai_agent_service import AIAgentService, IncidentAnalysis
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -39,6 +41,7 @@ class EmailService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.classifier = ClassifierService()
+        self.ai_agent = AIAgentService()
     
     async def send_email(
         self,
@@ -130,31 +133,133 @@ class EmailService:
         references: Optional[str],
         attachments_data: List[Tuple[str, bytes, str]],  # (filename, content, content_type)
     ) -> Tuple[Ticket, Email]:
-        """Process an inbound email - create or update ticket"""
+        """Process an inbound email with AI-powered information gathering"""
         
         # Check if this is a reply to an existing ticket
         ticket = await self._find_existing_ticket(subject, in_reply_to, references, from_address)
         
         if ticket:
             logger.info("Found existing ticket %s for email", ticket.ticket_code)
-        else:
-            # Create new ticket
-            category, priority = self.classifier.classify_email(subject, body_text or "")
-            community = self.classifier.extract_community_name(from_address, body_text or "")
+            # Process reply to existing ticket
+            email_record = await self._store_email(
+                ticket, message_id, subject, body_text, body_html,
+                from_address, from_name, to_address, cc_addresses,
+                received_at, in_reply_to, references, EmailDirection.INBOUND
+            )
             
-            ticket_service = TicketService(self.db)
-            ticket = await ticket_service.create_ticket(TicketCreate(
-                subject=subject,
-                description=body_text[:2000] if body_text else None,
-                category=category,
-                priority=priority,
-                reporter_email=from_address,
-                reporter_name=from_name,
-                community_name=community,
-            ))
-            logger.info("Created new ticket %s from email", ticket.ticket_code)
+            # Save attachments
+            if attachments_data:
+                await self._save_attachments(email_record, attachments_data, ticket.ticket_code)
+            
+            # If ticket is in NEEDS_INFO status, process with AI to check if info is now complete
+            if ticket.status == TicketStatus.NEEDS_INFO:
+                await self._process_info_response(ticket, body_text or "")
+            
+            return ticket, email_record
+        
+        # New ticket - analyze with AI
+        logger.info("Processing new incident email from %s", from_address)
+        
+        # Get conversation history (empty for new ticket)
+        conversation_history = []
+        
+        # Analyze with AI agent
+        analysis = await self.ai_agent.analyze_incident(
+            subject=subject,
+            body=body_text or "",
+            sender_email=from_address,
+            sender_name=from_name,
+            conversation_history=conversation_history,
+        )
+        
+        logger.info("AI Analysis - Complete info: %s, Category: %s, Missing: %s",
+                   analysis.has_complete_info, analysis.category, analysis.missing_fields)
+        
+        # Create ticket with AI-determined category/priority or fallback
+        category = analysis.category or self.classifier.classify_email(subject, body_text or "")[0]
+        priority = analysis.priority or self.classifier.classify_email(subject, body_text or "")[1]
+        community = self.classifier.extract_community_name(from_address, body_text or "")
+        
+        # Determine initial status based on info completeness
+        initial_status = TicketStatus.NEW if analysis.has_complete_info else TicketStatus.NEEDS_INFO
+        
+        # Prepare AI context for storage
+        ai_context = {
+            "analysis": {
+                "has_complete_info": analysis.has_complete_info,
+                "category": analysis.category.value if analysis.category else None,
+                "priority": analysis.priority.value if analysis.priority else None,
+                "missing_fields": analysis.missing_fields,
+                "extracted_info": analysis.extracted_info,
+                "summary": analysis.summary,
+            },
+            "conversation_history": [
+                {"role": "user", "content": f"Asunto: {subject}\n\nMensaje:\n{body_text or ''}"}
+            ],
+        }
+        
+        # Create ticket
+        ticket_service = TicketService(self.db)
+        ticket = await ticket_service.create_ticket(TicketCreate(
+            subject=subject,
+            description=body_text[:2000] if body_text else None,
+            category=category,
+            priority=priority,
+            reporter_email=from_address,
+            reporter_name=from_name,
+            community_name=community,
+        ))
+        
+        # Update ticket with AI context and status
+        ticket.status = initial_status
+        ticket.ai_context = ai_context
+        
+        # Update extracted location info if available
+        extracted = analysis.extracted_info
+        if extracted.get("address"):
+            ticket.address = extracted["address"]
+        if extracted.get("location_detail"):
+            ticket.location_detail = extracted["location_detail"]
+        
+        await self.db.commit()
+        await self.db.refresh(ticket)
+        
+        logger.info("Created ticket %s with status %s", ticket.ticket_code, initial_status.value)
         
         # Store the email
+        email_record = await self._store_email(
+            ticket, message_id, subject, body_text, body_html,
+            from_address, from_name, to_address, cc_addresses,
+            received_at, in_reply_to, references, EmailDirection.INBOUND
+        )
+        
+        # Save attachments
+        if attachments_data:
+            await self._save_attachments(email_record, attachments_data, ticket.ticket_code)
+        
+        # If info is incomplete, send follow-up email asking for more info
+        if not analysis.has_complete_info and analysis.follow_up_questions:
+            await self._send_info_request(ticket, analysis, email_record.message_id)
+        
+        return ticket, email_record
+    
+    async def _store_email(
+        self,
+        ticket: Ticket,
+        message_id: str,
+        subject: str,
+        body_text: Optional[str],
+        body_html: Optional[str],
+        from_address: str,
+        from_name: Optional[str],
+        to_address: str,
+        cc_addresses: Optional[str],
+        received_at: datetime,
+        in_reply_to: Optional[str],
+        references: Optional[str],
+        direction: EmailDirection,
+    ) -> Email:
+        """Store email record in database"""
         email_record = Email(
             ticket_id=ticket.id,
             message_id=message_id,
@@ -165,7 +270,7 @@ class EmailService:
             from_name=from_name,
             to_address=to_address,
             cc_addresses=cc_addresses,
-            direction=EmailDirection.INBOUND,
+            direction=direction,
             in_reply_to=in_reply_to,
             references_header=references,
             received_at=received_at,
@@ -173,12 +278,131 @@ class EmailService:
         self.db.add(email_record)
         await self.db.commit()
         await self.db.refresh(email_record)
-        
-        # Save attachments
-        if attachments_data:
-            await self._save_attachments(email_record, attachments_data, ticket.ticket_code)
-        
-        return ticket, email_record
+        return email_record
+    
+    async def _send_info_request(
+        self,
+        ticket: Ticket,
+        analysis: IncidentAnalysis,
+        reply_to_message_id: str,
+    ) -> None:
+        """Send email requesting missing information"""
+        try:
+            # Generate follow-up email content
+            subject, body = await self.ai_agent.generate_follow_up_email(
+                analysis=analysis,
+                ticket_code=ticket.ticket_code,
+                reporter_name=ticket.reporter_name,
+            )
+            
+            # Ensure subject includes ticket code
+            if ticket.ticket_code not in subject:
+                subject = f"[{ticket.ticket_code}] {subject}"
+            
+            # Send the email
+            await self.send_email(
+                to=ticket.reporter_email,
+                subject=subject,
+                body_text=body,
+                ticket=ticket,
+                in_reply_to=reply_to_message_id,
+                references=reply_to_message_id,
+            )
+            
+            logger.info("Sent info request email for ticket %s", ticket.ticket_code)
+            
+        except Exception as e:
+            logger.error("Failed to send info request for ticket %s: %s", ticket.ticket_code, str(e))
+    
+    async def _process_info_response(
+        self,
+        ticket: Ticket,
+        new_message: str,
+    ) -> None:
+        """Process a response to an info request and update ticket status"""
+        try:
+            # Get existing AI context
+            ai_context = ticket.ai_context or {}
+            conversation_history = ai_context.get("conversation_history", [])
+            
+            # Build previous analysis from context
+            prev_analysis_data = ai_context.get("analysis", {})
+            from app.models.ticket import Category, Priority
+            
+            prev_analysis = IncidentAnalysis(
+                has_complete_info=prev_analysis_data.get("has_complete_info", False),
+                category=Category[prev_analysis_data["category"]] if prev_analysis_data.get("category") else ticket.category,
+                priority=Priority[prev_analysis_data["priority"]] if prev_analysis_data.get("priority") else ticket.priority,
+                missing_fields=prev_analysis_data.get("missing_fields", []),
+                extracted_info=prev_analysis_data.get("extracted_info", {}),
+                follow_up_questions=[],
+                summary=prev_analysis_data.get("summary", ""),
+            )
+            
+            # Add new message to conversation history
+            conversation_history.append({"role": "user", "content": new_message})
+            
+            # Process with AI
+            updated_analysis = await self.ai_agent.process_follow_up_response(
+                original_analysis=prev_analysis,
+                new_message=new_message,
+                conversation_history=conversation_history,
+            )
+            
+            logger.info("Updated analysis - Complete info: %s, Missing: %s",
+                       updated_analysis.has_complete_info, updated_analysis.missing_fields)
+            
+            # Update AI context
+            ai_context["analysis"] = {
+                "has_complete_info": updated_analysis.has_complete_info,
+                "category": updated_analysis.category.value if updated_analysis.category else None,
+                "priority": updated_analysis.priority.value if updated_analysis.priority else None,
+                "missing_fields": updated_analysis.missing_fields,
+                "extracted_info": updated_analysis.extracted_info,
+                "summary": updated_analysis.summary,
+            }
+            ai_context["conversation_history"] = conversation_history
+            ticket.ai_context = ai_context
+            
+            # Update ticket fields from extracted info
+            extracted = updated_analysis.extracted_info
+            if extracted.get("address") and not ticket.address:
+                ticket.address = extracted["address"]
+            if extracted.get("location_detail") and not ticket.location_detail:
+                ticket.location_detail = extracted["location_detail"]
+            if extracted.get("reporter_name") and not ticket.reporter_name:
+                ticket.reporter_name = extracted["reporter_name"]
+            
+            # Update category/priority if AI determined better values
+            if updated_analysis.category:
+                ticket.category = updated_analysis.category
+            if updated_analysis.priority:
+                ticket.priority = updated_analysis.priority
+            
+            # If info is now complete, update status to NEW for processing
+            if updated_analysis.has_complete_info:
+                ticket.status = TicketStatus.NEW
+                logger.info("Ticket %s now has complete info, status changed to NEW", ticket.ticket_code)
+                
+                # TODO: Could auto-assign provider here based on category
+            else:
+                # Still missing info, send another request
+                # Get the last outbound email for reply reference
+                result = await self.db.execute(
+                    select(Email)
+                    .where(Email.ticket_id == ticket.id)
+                    .where(Email.direction == EmailDirection.OUTBOUND)
+                    .order_by(Email.received_at.desc())
+                )
+                last_outbound = result.scalar_one_or_none()
+                reply_to = last_outbound.message_id if last_outbound else None
+                
+                await self._send_info_request(ticket, updated_analysis, reply_to)
+            
+            await self.db.commit()
+            
+        except Exception as e:
+            logger.error("Error processing info response for ticket %s: %s", ticket.ticket_code, str(e))
     
     async def _find_existing_ticket(
         self,

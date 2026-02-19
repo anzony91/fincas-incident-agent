@@ -96,6 +96,100 @@
                 <div class="prose max-w-none text-gray-700 whitespace-pre-wrap bg-gray-50 p-4 rounded-lg">{{ ticket.description or 'Sin descripción disponible' }}</div>
             </div>
 
+            <!-- AI Analysis Info (shown when NEEDS_INFO or has AI context) -->
+            {% if ticket.status.value == 'NEEDS_INFO' or ticket.ai_context %}
+            <div class="bg-amber-50 border border-amber-200 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-amber-800 mb-4">🤖 Análisis de IA - Recopilación de Información</h2>
+                
+                {% if ticket.status.value == 'NEEDS_INFO' %}
+                <div class="bg-amber-100 border-l-4 border-amber-500 p-4 mb-4">
+                    <div class="flex items-center">
+                        <span class="text-amber-600 text-xl mr-2">⏳</span>
+                        <p class="text-amber-700 font-medium">Esperando información adicional del reportante</p>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if ticket.ai_context %}
+                {% set analysis = ticket.ai_context.get('analysis', {}) %}
+                
+                <!-- Extracted Info -->
+                <div class="mb-4">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-2">📋 Información Extraída</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                        {% set extracted = analysis.get('extracted_info', {}) %}
+                        {% if extracted.get('reporter_name') %}
+                        <div class="flex">
+                            <span class="text-gray-500 w-32">Reportante:</span>
+                            <span class="text-gray-900 font-medium">{{ extracted.reporter_name }}</span>
+                        </div>
+                        {% endif %}
+                        {% if extracted.get('reporter_contact') %}
+                        <div class="flex">
+                            <span class="text-gray-500 w-32">Contacto:</span>
+                            <span class="text-gray-900 font-medium">{{ extracted.reporter_contact }}</span>
+                        </div>
+                        {% endif %}
+                        {% if extracted.get('address') or ticket.address %}
+                        <div class="flex">
+                            <span class="text-gray-500 w-32">Dirección:</span>
+                            <span class="text-gray-900 font-medium">{{ extracted.get('address') or ticket.address }}</span>
+                        </div>
+                        {% endif %}
+                        {% if extracted.get('location_detail') or ticket.location_detail %}
+                        <div class="flex">
+                            <span class="text-gray-500 w-32">Ubicación:</span>
+                            <span class="text-gray-900 font-medium">{{ extracted.get('location_detail') or ticket.location_detail }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Missing Fields -->
+                {% if analysis.get('missing_fields') and analysis.missing_fields|length > 0 %}
+                <div class="mb-4">
+                    <h3 class="text-sm font-semibold text-red-700 mb-2">❌ Información Pendiente</h3>
+                    <ul class="list-disc list-inside text-sm text-red-600 space-y-1">
+                        {% for field in analysis.missing_fields %}
+                        <li>{{ field }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                
+                <!-- Summary -->
+                {% if analysis.get('summary') %}
+                <div class="mt-4 p-3 bg-white rounded border border-gray-200">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-1">📄 Resumen AI</h3>
+                    <p class="text-sm text-gray-600">{{ analysis.summary }}</p>
+                </div>
+                {% endif %}
+                
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Location Info (if available) -->
+            {% if ticket.address or ticket.location_detail %}
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">📍 Ubicación</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    {% if ticket.address %}
+                    <div>
+                        <span class="text-gray-500">Dirección:</span>
+                        <p class="text-gray-900 font-medium">{{ ticket.address }}</p>
+                    </div>
+                    {% endif %}
+                    {% if ticket.location_detail %}
+                    <div>
+                        <span class="text-gray-500">Detalle ubicación:</span>
+                        <p class="text-gray-900 font-medium">{{ ticket.location_detail }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Actions -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- Change Status Form -->

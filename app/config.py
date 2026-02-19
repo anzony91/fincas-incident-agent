@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # Worker settings
     poll_interval_seconds: int = 60
     
+    # OpenAI Configuration
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    
     # Application
     app_name: str = "Fincas Incident Agent"
     debug: bool = False
