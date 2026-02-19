@@ -119,9 +119,15 @@
                             <span class="text-xs">{{ ticket.created_at.strftime('%H:%M') }}</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <a href="/dashboard/tickets/{{ ticket.id }}" class="text-primary hover:text-blue-700 font-medium">
-                                Ver detalle
+                            <a href="/dashboard/tickets/{{ ticket.id }}" class="text-primary hover:text-blue-700 font-medium mr-3">
+                                Ver
                             </a>
+                            <form method="POST" action="/dashboard/tickets/{{ ticket.id }}/delete" class="inline"
+                                  onsubmit="return confirm('¿Eliminar ticket {{ ticket.ticket_code }}?');">
+                                <button type="submit" class="text-red-600 hover:text-red-800 font-medium">
+                                    Eliminar
+                                </button>
+                            </form>
                         </td>
                     </tr>
                     {% else %}

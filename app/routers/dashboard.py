@@ -309,3 +309,28 @@ async def providers_list(request: Request, db: AsyncSession = Depends(get_db)):
         "providers": providers,
         "categories": [c.value for c in Category]
     })
+
+
+@router.post("/tickets/{ticket_id}/delete", response_class=HTMLResponse)
+async def delete_ticket(
+    ticket_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a ticket."""
+    result = await db.execute(
+        select(Ticket).where(Ticket.id == ticket_id)
+    )
+    ticket = result.scalar_one_or_none()
+    
+    if ticket:
+        # Delete related events first
+        await db.execute(
+            select(Event).where(Event.ticket_id == ticket_id)
+        )
+        from sqlalchemy import delete as sql_delete
+        await db.execute(sql_delete(Event).where(Event.ticket_id == ticket_id))
+        await db.execute(sql_delete(Email).where(Email.ticket_id == ticket_id))
+        await db.delete(ticket)
+        await db.commit()
+    
+    return RedirectResponse(url="/dashboard/tickets", status_code=302)
