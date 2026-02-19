@@ -35,8 +35,8 @@
                     </svg>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500">Abiertos</p>
-                    <p class="text-3xl font-bold text-gray-900">{{ stats.open }}</p>
+                    <p class="text-sm font-medium text-gray-500">Nuevos</p>
+                    <p class="text-3xl font-bold text-gray-900">{{ stats.new }}</p>
                 </div>
             </div>
         </div>
@@ -81,14 +81,26 @@
             </div>
             <div class="p-6">
                 <div class="space-y-3">
-                    {% for status, count in stats.by_status.items() %}
                     <div class="flex items-center justify-between">
-                        <span class="status-{{ status }} px-3 py-1 rounded-full text-sm font-medium">
-                            {{ status | replace('_', ' ') }}
-                        </span>
-                        <span class="text-gray-900 font-semibold">{{ count }}</span>
+                        <span class="status-NEW px-3 py-1 rounded-full text-sm font-medium">NEW</span>
+                        <span class="text-gray-900 font-semibold">{{ stats.new }}</span>
                     </div>
-                    {% endfor %}
+                    <div class="flex items-center justify-between">
+                        <span class="status-IN_PROGRESS px-3 py-1 rounded-full text-sm font-medium">EN PROGRESO</span>
+                        <span class="text-gray-900 font-semibold">{{ stats.in_progress }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="status-NEEDS_INFO px-3 py-1 rounded-full text-sm font-medium">PENDIENTE INFO</span>
+                        <span class="text-gray-900 font-semibold">{{ stats.pending }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="status-DISPATCHED px-3 py-1 rounded-full text-sm font-medium">ENVIADO</span>
+                        <span class="text-gray-900 font-semibold">{{ stats.dispatched }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="status-CLOSED px-3 py-1 rounded-full text-sm font-medium">CERRADO</span>
+                        <span class="text-gray-900 font-semibold">{{ stats.closed }}</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -100,7 +112,7 @@
             </div>
             <div class="p-6">
                 <div class="space-y-3">
-                    {% for category, count in stats.by_category.items() %}
+                    {% for category, count in categories.items() %}
                     <div class="flex items-center justify-between">
                         <div class="flex items-center">
                             {% if category == 'WATER' %}

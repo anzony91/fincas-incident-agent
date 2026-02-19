@@ -8,7 +8,7 @@ from typing import Optional
 from datetime import datetime
 
 from app.database import get_db
-from app.models.ticket import Ticket, TicketStatus, TicketCategory, TicketPriority
+from app.models.ticket import Ticket, TicketStatus, Category, Priority
 from app.models.provider import Provider
 from app.models.event import Event
 from app.models.email import Email
@@ -25,7 +25,7 @@ async def dashboard_home(request: Request, db: AsyncSession = Depends(get_db)):
     total = total_result.scalar() or 0
     
     open_result = await db.execute(
-        select(func.count(Ticket.id)).where(Ticket.status == TicketStatus.OPEN)
+        select(func.count(Ticket.id)).where(Ticket.status == TicketStatus.NEW)
     )
     open_count = open_result.scalar() or 0
     
@@ -35,14 +35,14 @@ async def dashboard_home(request: Request, db: AsyncSession = Depends(get_db)):
     in_progress = in_progress_result.scalar() or 0
     
     pending_result = await db.execute(
-        select(func.count(Ticket.id)).where(Ticket.status == TicketStatus.PENDING_INFO)
+        select(func.count(Ticket.id)).where(Ticket.status == TicketStatus.NEEDS_INFO)
     )
     pending = pending_result.scalar() or 0
     
-    resolved_result = await db.execute(
-        select(func.count(Ticket.id)).where(Ticket.status == TicketStatus.RESOLVED)
+    dispatched_result = await db.execute(
+        select(func.count(Ticket.id)).where(Ticket.status == TicketStatus.DISPATCHED)
     )
-    resolved = resolved_result.scalar() or 0
+    dispatched = dispatched_result.scalar() or 0
     
     closed_result = await db.execute(
         select(func.count(Ticket.id)).where(Ticket.status == TicketStatus.CLOSED)
@@ -51,15 +51,15 @@ async def dashboard_home(request: Request, db: AsyncSession = Depends(get_db)):
     
     urgent_result = await db.execute(
         select(func.count(Ticket.id)).where(
-            Ticket.priority == TicketPriority.URGENT,
-            Ticket.status.notin_([TicketStatus.RESOLVED, TicketStatus.CLOSED])
+            Ticket.priority == Priority.URGENT,
+            Ticket.status != TicketStatus.CLOSED
         )
     )
     urgent = urgent_result.scalar() or 0
     
     # Get counts by category
     categories_data = {}
-    for cat in TicketCategory:
+    for cat in Category:
         cat_result = await db.execute(
             select(func.count(Ticket.id)).where(Ticket.category == cat)
         )
@@ -75,12 +75,13 @@ async def dashboard_home(request: Request, db: AsyncSession = Depends(get_db)):
     
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
+        "now": datetime.utcnow(),
         "stats": {
             "total": total,
-            "open": open_count,
+            "new": open_count,
             "in_progress": in_progress,
             "pending": pending,
-            "resolved": resolved,
+            "dispatched": dispatched,
             "closed": closed,
             "urgent": urgent
         },
@@ -112,13 +113,13 @@ async def tickets_list(
     
     if category:
         try:
-            query = query.where(Ticket.category == TicketCategory(category))
+            query = query.where(Ticket.category == Category(category))
         except ValueError:
             pass
     
     if priority:
         try:
-            query = query.where(Ticket.priority == TicketPriority(priority))
+            query = query.where(Ticket.priority == Priority(priority))
         except ValueError:
             pass
     
@@ -159,8 +160,8 @@ async def tickets_list(
             "search": search
         },
         "statuses": [s.value for s in TicketStatus],
-        "categories": [c.value for c in TicketCategory],
-        "priorities": [p.value for p in TicketPriority]
+        "categories": [c.value for c in Category],
+        "priorities": [p.value for p in Priority]
     })
 
 
@@ -236,7 +237,7 @@ async def update_ticket_status(
             ticket.status = new_status
             ticket.updated_at = datetime.utcnow()
             
-            if new_status == TicketStatus.RESOLVED and not ticket.resolved_at:
+            if new_status == TicketStatus.CLOSED and not ticket.resolved_at:
                 ticket.resolved_at = datetime.utcnow()
             
             # Create event
@@ -306,5 +307,5 @@ async def providers_list(request: Request, db: AsyncSession = Depends(get_db)):
     return templates.TemplateResponse("providers.html", {
         "request": request,
         "providers": providers,
-        "categories": [c.value for c in TicketCategory]
+        "categories": [c.value for c in Category]
     })
