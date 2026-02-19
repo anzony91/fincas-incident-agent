@@ -47,7 +47,11 @@ class Settings(BaseSettings):
     # Get API key from https://resend.com - 3000 emails/month free
     resend_api_key: str = ""
     
-    # Email provider: "smtp" or "resend"
+    # SendGrid API (another alternative - 100 emails/day free)
+    # Get API key from https://sendgrid.com
+    sendgrid_api_key: str = ""
+    
+    # Email provider: "smtp", "resend", or "sendgrid"
     email_provider: str = "smtp"
     
     @property

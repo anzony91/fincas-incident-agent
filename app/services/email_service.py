@@ -55,7 +55,7 @@ class EmailService:
         in_reply_to: Optional[str] = None,
         references: Optional[str] = None,
     ) -> Email:
-        """Send an email via configured provider (Resend or SMTP)"""
+        """Send an email via configured provider (Resend, SendGrid, or SMTP)"""
         
         # Generate message ID
         message_id = f"<{uuid.uuid4()}@fincas-agent>"
@@ -63,6 +63,8 @@ class EmailService:
         # Choose provider
         if settings.email_provider == "resend" and settings.resend_api_key:
             await self._send_via_resend(to, subject, body_text, body_html, cc, in_reply_to, references)
+        elif settings.email_provider == "sendgrid" and settings.sendgrid_api_key:
+            await self._send_via_sendgrid(to, subject, body_text, body_html, cc, in_reply_to, references)
         else:
             await self._send_via_smtp(to, subject, body_text, body_html, cc, message_id, in_reply_to, references)
         
@@ -148,6 +150,71 @@ class EmailService:
             
             result = response.json()
             logger.info("Email sent via Resend, ID: %s", result.get("id"))
+    
+    async def _send_via_sendgrid(
+        self,
+        to: str,
+        subject: str,
+        body_text: str,
+        body_html: Optional[str],
+        cc: Optional[List[str]],
+        in_reply_to: Optional[str],
+        references: Optional[str],
+    ) -> None:
+        """Send email via SendGrid API (HTTP-based, no port blocking issues)"""
+        import httpx
+        
+        logger.info("Sending email to %s via SendGrid API", to)
+        
+        # Build email payload for SendGrid v3 API
+        personalizations = {
+            "to": [{"email": to}],
+        }
+        
+        if cc:
+            personalizations["cc"] = [{"email": addr} for addr in cc]
+        
+        payload = {
+            "personalizations": [personalizations],
+            "from": {
+                "email": settings.effective_from_email,
+                "name": settings.from_name,
+            },
+            "subject": subject,
+            "content": [
+                {"type": "text/plain", "value": body_text},
+            ],
+        }
+        
+        if body_html:
+            payload["content"].append({"type": "text/html", "value": body_html})
+        
+        # Add reply headers if available
+        if in_reply_to or references:
+            payload["headers"] = {}
+            if in_reply_to:
+                payload["headers"]["In-Reply-To"] = in_reply_to
+            if references:
+                payload["headers"]["References"] = references
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={
+                    "Authorization": f"Bearer {settings.sendgrid_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=30.0,
+            )
+            
+            # SendGrid returns 202 Accepted on success
+            if response.status_code not in (200, 201, 202):
+                error_detail = response.text
+                logger.error("SendGrid API error: %s - %s", response.status_code, error_detail)
+                raise Exception(f"SendGrid API error: {response.status_code} - {error_detail}")
+            
+            logger.info("Email sent via SendGrid successfully")
     
     async def _send_via_smtp(
         self,
