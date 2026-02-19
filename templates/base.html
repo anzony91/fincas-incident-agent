@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dashboard{% endblock %} - Fincas Incident Agent</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- HTMX for dynamic interactions -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Custom Tailwind Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#6B7280',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        .status-NEW { background-color: #DBEAFE; color: #1E40AF; }
+        .status-NEEDS_INFO { background-color: #FEF3C7; color: #92400E; }
+        .status-VALIDATING { background-color: #E0E7FF; color: #3730A3; }
+        .status-DISPATCHED { background-color: #CFFAFE; color: #0E7490; }
+        .status-SCHEDULED { background-color: #D1FAE5; color: #065F46; }
+        .status-IN_PROGRESS { background-color: #FED7AA; color: #9A3412; }
+        .status-NEEDS_CONFIRMATION { background-color: #FCE7F3; color: #9D174D; }
+        .status-WAITING_INVOICE { background-color: #F3E8FF; color: #6B21A8; }
+        .status-CLOSED { background-color: #D1D5DB; color: #374151; }
+        .status-ESCALATED { background-color: #FEE2E2; color: #991B1B; }
+        
+        .priority-URGENT { background-color: #FEE2E2; color: #991B1B; border-left: 4px solid #DC2626; }
+        .priority-HIGH { background-color: #FED7AA; color: #9A3412; border-left: 4px solid #EA580C; }
+        .priority-MEDIUM { background-color: #FEF3C7; color: #92400E; border-left: 4px solid #F59E0B; }
+        .priority-LOW { background-color: #D1FAE5; color: #065F46; border-left: 4px solid #10B981; }
+        
+        .category-icon { width: 24px; height: 24px; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/dashboard" class="flex items-center">
+                        <svg class="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        <span class="ml-2 text-xl font-bold text-gray-900">Fincas Incident Agent</span>
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/dashboard" class="{% if active_page == 'dashboard' %}text-primary font-semibold{% else %}text-gray-600 hover:text-gray-900{% endif %} px-3 py-2">
+                        Dashboard
+                    </a>
+                    <a href="/dashboard/tickets" class="{% if active_page == 'tickets' %}text-primary font-semibold{% else %}text-gray-600 hover:text-gray-900{% endif %} px-3 py-2">
+                        Tickets
+                    </a>
+                    <a href="/dashboard/providers" class="{% if active_page == 'providers' %}text-primary font-semibold{% else %}text-gray-600 hover:text-gray-900{% endif %} px-3 py-2">
+                        Proveedores
+                    </a>
+                    <a href="/docs" target="_blank" class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm">
+                        API Docs ↗
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t mt-auto">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+            <p class="text-center text-gray-500 text-sm">
+                Fincas Incident Agent © 2026 - Sistema de gestión de incidencias
+            </p>
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

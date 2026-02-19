@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.ticket_code }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+        <div>
+            <a href="/dashboard/tickets" class="text-sm text-gray-500 hover:text-primary mb-2 inline-block">
+                ← Volver a tickets
+            </a>
+            <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                <span class="font-mono text-primary">{{ ticket.ticket_code }}</span>
+                <span class="status-{{ ticket.status }} px-3 py-1 text-sm font-semibold rounded-full">
+                    {{ ticket.status | replace('_', ' ') }}
+                </span>
+            </h1>
+            <p class="text-lg text-gray-700 mt-2">{{ ticket.subject }}</p>
+        </div>
+        
+        <div class="flex gap-2">
+            <span class="priority-{{ ticket.priority }} px-3 py-1 text-sm font-semibold rounded">
+                Prioridad: {{ ticket.priority }}
+            </span>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Content -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Description -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Descripción</h2>
+                <div class="prose max-w-none text-gray-700 whitespace-pre-wrap">{{ ticket.description or 'Sin descripción' }}</div>
+            </div>
+
+            <!-- Change Status Form -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Cambiar Estado</h2>
+                <form method="POST" action="/dashboard/tickets/{{ ticket.id }}/status" class="flex gap-4 items-end">
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nuevo Estado</label>
+                        <select name="status" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                            {% for s in statuses %}
+                            <option value="{{ s }}" {% if ticket.status == s %}selected{% endif %}>{{ s | replace('_', ' ') }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                        Actualizar
+                    </button>
+                </form>
+            </div>
+
+            <!-- Assign Provider Form -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Asignar Proveedor</h2>
+                <form method="POST" action="/dashboard/tickets/{{ ticket.id }}/assign" class="flex gap-4 items-end">
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
+                        <select name="provider_id" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                            <option value="">Sin asignar</option>
+                            {% for p in providers %}
+                            <option value="{{ p.id }}" {% if ticket.assigned_provider_id == p.id %}selected{% endif %}>
+                                {{ p.name }} ({{ p.category | replace('_', ' ') }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2">
+                        Asignar
+                    </button>
+                </form>
+            </div>
+
+            <!-- Timeline / Events -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Historial de Eventos</h2>
+                
+                {% if events %}
+                <div class="flow-root">
+                    <ul class="-mb-8">
+                        {% for event in events %}
+                        <li>
+                            <div class="relative pb-8">
+                                {% if not loop.last %}
+                                <span class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"></span>
+                                {% endif %}
+                                <div class="relative flex space-x-3">
+                                    <div>
+                                        <span class="h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white
+                                            {% if event.event_type == 'STATUS_CHANGED' %}bg-yellow-500
+                                            {% elif event.event_type == 'PROVIDER_ASSIGNED' %}bg-green-500
+                                            {% elif event.event_type == 'EMAIL_RECEIVED' %}bg-blue-500
+                                            {% elif event.event_type == 'EMAIL_SENT' %}bg-purple-500
+                                            {% else %}bg-gray-400{% endif %}">
+                                            {% if event.event_type == 'STATUS_CHANGED' %}
+                                            <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            {% elif event.event_type == 'PROVIDER_ASSIGNED' %}
+                                            <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                            </svg>
+                                            {% elif event.event_type == 'EMAIL_RECEIVED' or event.event_type == 'EMAIL_SENT' %}
+                                            <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                            </svg>
+                                            {% else %}
+                                            <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                    <div class="min-w-0 flex-1 pt-1.5">
+                                        <p class="text-sm text-gray-900">
+                                            <span class="font-medium">{{ event.event_type | replace('_', ' ') }}</span>
+                                        </p>
+                                        {% if event.description %}
+                                        <p class="text-sm text-gray-500 mt-1">{{ event.description }}</p>
+                                        {% endif %}
+                                        <p class="text-xs text-gray-400 mt-1">
+                                            {{ event.created_at.strftime('%d/%m/%Y %H:%M') }}
+                                            {% if event.actor %}· {{ event.actor }}{% endif %}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-center py-4">No hay eventos registrados</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Info Card -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Información</h3>
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Categoría</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            {% if ticket.category == 'WATER' %}💧{% elif ticket.category == 'ELEVATOR' %}🛗{% elif ticket.category == 'ELECTRICITY' %}⚡{% elif ticket.category == 'GARAGE_DOOR' %}🚗{% elif ticket.category == 'CLEANING' %}🧹{% elif ticket.category == 'SECURITY' %}🔒{% else %}📋{% endif %}
+                            {{ ticket.category | replace('_', ' ') }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Reportado por</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ ticket.reporter_name or 'Sin nombre' }}</dd>
+                        <dd class="text-sm text-gray-500">{{ ticket.reporter_email }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Creado</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ ticket.created_at.strftime('%d/%m/%Y %H:%M') }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Actualizado</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ ticket.updated_at.strftime('%d/%m/%Y %H:%M') }}</dd>
+                    </div>
+                    {% if ticket.resolved_at %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Resuelto</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ ticket.resolved_at.strftime('%d/%m/%Y %H:%M') }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+
+            <!-- Assigned Provider -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Proveedor Asignado</h3>
+                {% if ticket.assigned_provider %}
+                <div class="space-y-2">
+                    <p class="font-medium text-gray-900">{{ ticket.assigned_provider.name }}</p>
+                    <p class="text-sm text-gray-500">{{ ticket.assigned_provider.category | replace('_', ' ') }}</p>
+                    {% if ticket.assigned_provider.contact_phone %}
+                    <p class="text-sm text-gray-700">📞 {{ ticket.assigned_provider.contact_phone }}</p>
+                    {% endif %}
+                    {% if ticket.assigned_provider.contact_email %}
+                    <p class="text-sm text-gray-700">✉️ {{ ticket.assigned_provider.contact_email }}</p>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-sm">Sin proveedor asignado</p>
+                {% endif %}
+            </div>
+
+            <!-- Related Emails -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Emails Relacionados</h3>
+                {% if emails %}
+                <ul class="space-y-3">
+                    {% for email in emails %}
+                    <li class="border-l-4 {% if email.direction == 'INBOUND' %}border-blue-400{% else %}border-green-400{% endif %} pl-3 py-1">
+                        <p class="text-sm font-medium text-gray-900 truncate">{{ email.subject }}</p>
+                        <p class="text-xs text-gray-500">
+                            {{ email.direction }} · {{ email.received_at.strftime('%d/%m %H:%M') }}
+                        </p>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-gray-500 text-sm">Sin emails relacionados</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

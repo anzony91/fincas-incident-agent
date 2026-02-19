@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <span class="text-sm text-gray-500">Última actualización: {{ now.strftime('%d/%m/%Y %H:%M') }}</span>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Total Tickets -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                    <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Total Tickets</p>
+                    <p class="text-3xl font-bold text-gray-900">{{ stats.total }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Open Tickets -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                    <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Abiertos</p>
+                    <p class="text-3xl font-bold text-gray-900">{{ stats.open }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Urgent -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-red-100 text-red-600">
+                    <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Urgentes</p>
+                    <p class="text-3xl font-bold text-red-600">{{ stats.urgent }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Closed Today -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-green-100 text-green-600">
+                    <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Cerrados</p>
+                    <p class="text-3xl font-bold text-gray-900">{{ stats.closed }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- By Status and By Category -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- By Status -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b">
+                <h2 class="text-lg font-semibold text-gray-900">Por Estado</h2>
+            </div>
+            <div class="p-6">
+                <div class="space-y-3">
+                    {% for status, count in stats.by_status.items() %}
+                    <div class="flex items-center justify-between">
+                        <span class="status-{{ status }} px-3 py-1 rounded-full text-sm font-medium">
+                            {{ status | replace('_', ' ') }}
+                        </span>
+                        <span class="text-gray-900 font-semibold">{{ count }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- By Category -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b">
+                <h2 class="text-lg font-semibold text-gray-900">Por Categoría</h2>
+            </div>
+            <div class="p-6">
+                <div class="space-y-3">
+                    {% for category, count in stats.by_category.items() %}
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            {% if category == 'WATER' %}
+                            <span class="text-blue-500 mr-2">💧</span>
+                            {% elif category == 'ELEVATOR' %}
+                            <span class="text-gray-500 mr-2">🛗</span>
+                            {% elif category == 'ELECTRICITY' %}
+                            <span class="text-yellow-500 mr-2">⚡</span>
+                            {% elif category == 'GARAGE_DOOR' %}
+                            <span class="text-gray-600 mr-2">🚗</span>
+                            {% elif category == 'CLEANING' %}
+                            <span class="text-green-500 mr-2">🧹</span>
+                            {% elif category == 'SECURITY' %}
+                            <span class="text-red-500 mr-2">🔒</span>
+                            {% else %}
+                            <span class="text-gray-400 mr-2">📋</span>
+                            {% endif %}
+                            <span class="text-gray-700">{{ category | replace('_', ' ') }}</span>
+                        </div>
+                        <span class="text-gray-900 font-semibold">{{ count }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Tickets -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900">Tickets Recientes</h2>
+            <a href="/dashboard/tickets" class="text-primary hover:text-blue-700 text-sm font-medium">
+                Ver todos →
+            </a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asunto</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for ticket in recent_tickets %}
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='/dashboard/tickets/{{ ticket.id }}'">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-sm font-mono font-semibold text-primary">{{ ticket.ticket_code }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm text-gray-900 truncate max-w-xs">{{ ticket.subject }}</div>
+                            <div class="text-xs text-gray-500">{{ ticket.reporter_email }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-sm text-gray-700">
+                                {% if ticket.category == 'WATER' %}💧{% elif ticket.category == 'ELEVATOR' %}🛗{% elif ticket.category == 'ELECTRICITY' %}⚡{% elif ticket.category == 'GARAGE_DOOR' %}🚗{% elif ticket.category == 'CLEANING' %}🧹{% elif ticket.category == 'SECURITY' %}🔒{% else %}📋{% endif %}
+                                {{ ticket.category | replace('_', ' ') }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="priority-{{ ticket.priority }} px-2 py-1 text-xs font-semibold rounded">
+                                {{ ticket.priority }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="status-{{ ticket.status }} px-2 py-1 text-xs font-semibold rounded-full">
+                                {{ ticket.status | replace('_', ' ') }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ ticket.created_at.strftime('%d/%m/%Y %H:%M') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
