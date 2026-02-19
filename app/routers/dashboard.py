@@ -179,7 +179,7 @@ async def ticket_detail(
     ticket = result.scalar_one_or_none()
     
     if not ticket:
-        return RedirectResponse(url="/dashboard/tickets", status_code=302)
+        return RedirectResponse(url="/dashboard/tickets", status_code=303)
     
     # Get events
     events_result = await db.execute(
@@ -252,7 +252,7 @@ async def update_ticket_status(
         except ValueError:
             pass
     
-    return RedirectResponse(url=f"/dashboard/tickets/{ticket_id}", status_code=302)
+    return RedirectResponse(url=f"/dashboard/tickets/{ticket_id}", status_code=303)
 
 
 @router.post("/tickets/{ticket_id}/assign", response_class=HTMLResponse)
@@ -268,8 +268,14 @@ async def assign_provider(
     ticket = result.scalar_one_or_none()
     
     if ticket:
-        provider_id_int = int(provider_id) if provider_id else None
-        old_provider_id = ticket.assigned_provider_id
+        # Handle empty string or invalid provider_id
+        provider_id_int = None
+        if provider_id and provider_id.strip():
+            try:
+                provider_id_int = int(provider_id)
+            except ValueError:
+                provider_id_int = None
+        
         ticket.assigned_provider_id = provider_id_int
         ticket.updated_at = datetime.utcnow()
         
@@ -293,7 +299,7 @@ async def assign_provider(
         db.add(event)
         await db.commit()
     
-    return RedirectResponse(url=f"/dashboard/tickets/{ticket_id}", status_code=302)
+    return RedirectResponse(url=f"/dashboard/tickets/{ticket_id}", status_code=303)
 
 
 @router.get("/providers", response_class=HTMLResponse)
@@ -333,4 +339,4 @@ async def delete_ticket(
         await db.delete(ticket)
         await db.commit()
     
-    return RedirectResponse(url="/dashboard/tickets", status_code=302)
+    return RedirectResponse(url="/dashboard/tickets", status_code=303)
