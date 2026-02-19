@@ -245,7 +245,7 @@ async def update_ticket_status(
                 ticket_id=ticket_id,
                 event_type="STATUS_CHANGED",
                 description=f"Estado cambiado de {old_status.value} a {new_status.value}",
-                actor="Dashboard"
+                created_by="Dashboard"
             )
             db.add(event)
             await db.commit()
@@ -288,7 +288,7 @@ async def assign_provider(
             ticket_id=ticket_id,
             event_type="PROVIDER_ASSIGNED",
             description=f"Proveedor asignado: {provider_name}",
-            actor="Dashboard"
+            created_by="Dashboard"
         )
         db.add(event)
         await db.commit()

@@ -188,7 +188,7 @@
                                         {% endif %}
                                         <p class="text-xs text-gray-400 mt-1">
                                             {{ event.created_at.strftime('%d/%m/%Y %H:%M') }}
-                                            {% if event.actor %}· {{ event.actor }}{% endif %}
+                                            {% if event.created_by %}· {{ event.created_by }}{% endif %}
                                         </p>
                                     </div>
                                 </div>
@@ -278,10 +278,10 @@
                 {% if emails %}
                 <ul class="space-y-3">
                     {% for email in emails %}
-                    <li class="border-l-4 {% if email.direction == 'INBOUND' %}border-blue-400{% else %}border-green-400{% endif %} pl-3 py-1">
+                    <li class="border-l-4 {% if email.direction.value == 'INBOUND' %}border-blue-400{% else %}border-green-400{% endif %} pl-3 py-1">
                         <p class="text-sm font-medium text-gray-900 truncate">{{ email.subject }}</p>
                         <p class="text-xs text-gray-500">
-                            {% if email.direction == 'INBOUND' %}📥 Recibido{% else %}📤 Enviado{% endif %}
+                            {% if email.direction.value == 'INBOUND' %}📥 Recibido{% else %}📤 Enviado{% endif %}
                             · {{ email.received_at.strftime('%d/%m %H:%M') }}
                         </p>
                     </li>
