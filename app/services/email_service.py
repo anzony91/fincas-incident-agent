@@ -43,6 +43,8 @@ class EmailService:
         self.db = db
         self.classifier = ClassifierService()
         self.ai_agent = AIAgentService()
+        logger.info("EmailService initialized - Provider: %s, From: %s", 
+                   settings.email_provider, settings.effective_from_email)
     
     async def send_email(
         self,
@@ -60,15 +62,24 @@ class EmailService:
         # Generate message ID
         message_id = f"<{uuid.uuid4()}@fincas-agent>"
         
+        # Log configuration for debugging
+        logger.info("Preparing to send email: TO=%s, FROM=%s, PROVIDER=%s", 
+                   to, settings.effective_from_email, settings.email_provider)
+        logger.info("API Keys configured: RESEND=%s, SENDGRID=%s", 
+                   bool(settings.resend_api_key), bool(settings.sendgrid_api_key))
+        
         # Choose provider
-        if settings.email_provider == "resend" and settings.resend_api_key:
-            await self._send_via_resend(to, subject, body_text, body_html, cc, in_reply_to, references)
-        elif settings.email_provider == "sendgrid" and settings.sendgrid_api_key:
+        if settings.email_provider == "sendgrid" and settings.sendgrid_api_key:
+            logger.info("Using SendGrid provider")
             await self._send_via_sendgrid(to, subject, body_text, body_html, cc, in_reply_to, references)
+        elif settings.email_provider == "resend" and settings.resend_api_key:
+            logger.info("Using Resend provider")
+            await self._send_via_resend(to, subject, body_text, body_html, cc, in_reply_to, references)
         else:
+            logger.info("Using SMTP provider (fallback)")
             await self._send_via_smtp(to, subject, body_text, body_html, cc, message_id, in_reply_to, references)
         
-        logger.info("Email sent successfully to %s via %s", to, settings.email_provider)
+        logger.info("Email sent successfully to %s via %s from %s", to, settings.email_provider, settings.effective_from_email)
         
         # Store outbound email if ticket provided
         if ticket:
@@ -840,6 +851,8 @@ async def process_emails():
     
     # Get the system's own email address to filter out self-sent emails
     system_email = settings.effective_from_email.lower()
+    logger.info("Processing %d emails. System email (for self-filter): %s, Provider: %s", 
+               len(emails), system_email, settings.email_provider)
     
     async with async_session_factory() as db:
         service = EmailService(db)
