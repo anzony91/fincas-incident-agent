@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     from_email: str = ""
     from_name: str = "Administración de Fincas"
     
+    # Resend API (alternative to SMTP - recommended for cloud deployments)
+    # Get API key from https://resend.com - 3000 emails/month free
+    resend_api_key: str = ""
+    
+    # Email provider: "smtp" or "resend"
+    email_provider: str = "smtp"
+    
     @property
     def effective_smtp_user(self) -> str:
         """Get SMTP user, falling back to IMAP user"""

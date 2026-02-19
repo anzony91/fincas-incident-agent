@@ -12,6 +12,7 @@ greenlet>=3.0.0
 # Email
 imapclient>=3.0.0
 aiosmtplib>=3.0.0
+httpx>=0.26.0  # For Resend API (HTTP-based email sending)
 
 # AI / OpenAI
 openai>=1.12.0

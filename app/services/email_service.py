@@ -55,61 +55,18 @@ class EmailService:
         in_reply_to: Optional[str] = None,
         references: Optional[str] = None,
     ) -> Email:
-        """Send an email via SMTP"""
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{settings.from_name} <{settings.effective_from_email}>"
-        msg["To"] = to
-        
-        if cc:
-            msg["Cc"] = ", ".join(cc)
+        """Send an email via configured provider (Resend or SMTP)"""
         
         # Generate message ID
         message_id = f"<{uuid.uuid4()}@fincas-agent>"
-        msg["Message-ID"] = message_id
         
-        if in_reply_to:
-            msg["In-Reply-To"] = in_reply_to
-        if references:
-            msg["References"] = references
+        # Choose provider
+        if settings.email_provider == "resend" and settings.resend_api_key:
+            await self._send_via_resend(to, subject, body_text, body_html, cc, in_reply_to, references)
+        else:
+            await self._send_via_smtp(to, subject, body_text, body_html, cc, message_id, in_reply_to, references)
         
-        # Add text body
-        msg.attach(MIMEText(body_text, "plain", "utf-8"))
-        
-        # Add HTML body if provided
-        if body_html:
-            msg.attach(MIMEText(body_html, "html", "utf-8"))
-        
-        # Check SMTP credentials
-        smtp_user = settings.effective_smtp_user
-        smtp_password = settings.effective_smtp_password
-        
-        if not smtp_user or not smtp_password:
-            logger.error("SMTP credentials not configured - cannot send email")
-            raise ValueError("SMTP credentials not configured")
-        
-        # Send via SMTP
-        try:
-            logger.info("Sending email to %s via %s:%d (TLS=%s)", to, settings.smtp_host, settings.smtp_port, settings.smtp_use_tls)
-            
-            # Port 465 uses direct TLS, port 587 uses STARTTLS
-            use_tls = settings.smtp_use_tls and settings.smtp_port == 465
-            start_tls = not use_tls and settings.smtp_port == 587
-            
-            await aiosmtplib.send(
-                msg,
-                hostname=settings.smtp_host,
-                port=settings.smtp_port,
-                username=smtp_user,
-                password=smtp_password,
-                use_tls=use_tls,
-                start_tls=start_tls,
-                timeout=settings.smtp_timeout,
-            )
-            logger.info("Email sent successfully to %s", to)
-        except Exception as e:
-            logger.error("Failed to send email to %s: %s", to, str(e))
-            raise
+        logger.info("Email sent successfully to %s via %s", to, settings.email_provider)
         
         # Store outbound email if ticket provided
         if ticket:
@@ -134,6 +91,122 @@ class EmailService:
             return email_record
         
         return None
+    
+    async def _send_via_resend(
+        self,
+        to: str,
+        subject: str,
+        body_text: str,
+        body_html: Optional[str],
+        cc: Optional[List[str]],
+        in_reply_to: Optional[str],
+        references: Optional[str],
+    ) -> None:
+        """Send email via Resend API (HTTP-based, no port blocking issues)"""
+        import httpx
+        
+        logger.info("Sending email to %s via Resend API", to)
+        
+        # Build email payload
+        payload = {
+            "from": f"{settings.from_name} <{settings.effective_from_email}>",
+            "to": [to],
+            "subject": subject,
+            "text": body_text,
+        }
+        
+        if body_html:
+            payload["html"] = body_html
+        
+        if cc:
+            payload["cc"] = cc
+        
+        # Add reply headers if available
+        headers_dict = {}
+        if in_reply_to:
+            headers_dict["In-Reply-To"] = in_reply_to
+        if references:
+            headers_dict["References"] = references
+        if headers_dict:
+            payload["headers"] = headers_dict
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {settings.resend_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=30.0,
+            )
+            
+            if response.status_code not in (200, 201):
+                error_detail = response.text
+                logger.error("Resend API error: %s - %s", response.status_code, error_detail)
+                raise Exception(f"Resend API error: {response.status_code} - {error_detail}")
+            
+            result = response.json()
+            logger.info("Email sent via Resend, ID: %s", result.get("id"))
+    
+    async def _send_via_smtp(
+        self,
+        to: str,
+        subject: str,
+        body_text: str,
+        body_html: Optional[str],
+        cc: Optional[List[str]],
+        message_id: str,
+        in_reply_to: Optional[str],
+        references: Optional[str],
+    ) -> None:
+        """Send email via SMTP"""
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{settings.from_name} <{settings.effective_from_email}>"
+        msg["To"] = to
+        
+        if cc:
+            msg["Cc"] = ", ".join(cc)
+        
+        msg["Message-ID"] = message_id
+        
+        if in_reply_to:
+            msg["In-Reply-To"] = in_reply_to
+        if references:
+            msg["References"] = references
+        
+        # Add text body
+        msg.attach(MIMEText(body_text, "plain", "utf-8"))
+        
+        # Add HTML body if provided
+        if body_html:
+            msg.attach(MIMEText(body_html, "html", "utf-8"))
+        
+        # Check SMTP credentials
+        smtp_user = settings.effective_smtp_user
+        smtp_password = settings.effective_smtp_password
+        
+        if not smtp_user or not smtp_password:
+            logger.error("SMTP credentials not configured - cannot send email")
+            raise ValueError("SMTP credentials not configured")
+        
+        logger.info("Sending email to %s via %s:%d (TLS=%s)", to, settings.smtp_host, settings.smtp_port, settings.smtp_use_tls)
+        
+        # Port 465 uses direct TLS, port 587 uses STARTTLS
+        use_tls = settings.smtp_use_tls and settings.smtp_port == 465
+        start_tls = not use_tls and settings.smtp_port == 587
+        
+        await aiosmtplib.send(
+            msg,
+            hostname=settings.smtp_host,
+            port=settings.smtp_port,
+            username=smtp_user,
+            password=smtp_password,
+            use_tls=use_tls,
+            start_tls=start_tls,
+            timeout=settings.smtp_timeout,
+        )
     
     async def process_inbound_email(
         self,
