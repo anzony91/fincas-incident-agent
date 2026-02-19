@@ -3,6 +3,7 @@ Application configuration using Pydantic Settings
 """
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -16,6 +17,14 @@ class Settings(BaseSettings):
     
     # Database
     database_url: str = "postgresql+asyncpg://fincas:fincas123@localhost:5432/fincas_db"
+    
+    @field_validator("database_url")
+    @classmethod
+    def fix_database_url(cls, v: str) -> str:
+        """Convert postgresql:// to postgresql+asyncpg:// for async support"""
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
     
     # IMAP Configuration
     imap_host: str = "imap.gmail.com"
