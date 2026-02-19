@@ -1,0 +1,58 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fincas-incident-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://fincas:fincas123@postgres:5432/fincas_db
+    env_file:
+      - .env
+    volumes:
+      - ./data/attachments:/app/data/attachments
+      - ./templates:/app/templates
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - fincas-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: fincas-postgres
+    environment:
+      POSTGRES_USER: fincas
+      POSTGRES_PASSWORD: fincas123
+      POSTGRES_DB: fincas_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fincas -d fincas_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fincas-network
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: fincas-mailhog
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+    networks:
+      - fincas-network
+
+networks:
+  fincas-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

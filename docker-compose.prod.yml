@@ -1,0 +1,98 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fincas-app
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://fincas:${DB_PASSWORD}@postgres:5432/fincas_db
+    env_file:
+      - .env
+    volumes:
+      - attachments_data:/app/data/attachments
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - fincas-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fincas.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.fincas.tls=true"
+      - "traefik.http.routers.fincas.tls.certresolver=letsencrypt"
+      - "traefik.http.services.fincas.loadbalancer.server.port=8000"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: fincas-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: fincas
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: fincas_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fincas -d fincas_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fincas-network
+
+  traefik:
+    image: traefik:v2.10
+    container_name: fincas-traefik
+    restart: always
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt_data:/letsencrypt
+    networks:
+      - fincas-network
+
+  # Backup automático de la base de datos
+  backup:
+    image: prodrigestivill/postgres-backup-local
+    container_name: fincas-backup
+    restart: always
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=fincas_db
+      - POSTGRES_USER=fincas
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - SCHEDULE=@daily
+      - BACKUP_KEEP_DAYS=7
+      - BACKUP_KEEP_WEEKS=4
+    volumes:
+      - backup_data:/backups
+    depends_on:
+      - postgres
+    networks:
+      - fincas-network
+
+volumes:
+  postgres_data:
+  attachments_data:
+  letsencrypt_data:
+  backup_data:
+
+networks:
+  fincas-network:
+    driver: bridge
