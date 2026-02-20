@@ -125,10 +125,10 @@
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onclick="openEditModal({{ reporter | tojson }})" class="text-primary hover:text-blue-700 mr-3">
+                        <button onclick="openEditModal({id: {{ reporter.id }}, name: '{{ reporter.name | e }}', email: '{{ reporter.email | e }}', phone: '{{ reporter.phone or '' | e }}', phone_secondary: '{{ reporter.phone_secondary or '' | e }}', community_name: '{{ reporter.community_name or '' | e }}', address: '{{ reporter.address or '' | e }}', floor_door: '{{ reporter.floor_door or '' | e }}', dni_nif: '{{ reporter.dni_nif or '' | e }}', role: '{{ reporter.role or '' | e }}', is_active: {{ reporter.is_active | lower }}, preferred_contact_method: '{{ reporter.preferred_contact_method or '' | e }}', notes: '{{ reporter.notes or '' | e }}'})" class="text-primary hover:text-blue-700 mr-3">
                             Editar
                         </button>
-                        <button onclick="confirmDelete({{ reporter.id }}, '{{ reporter.name }}')" class="text-red-600 hover:text-red-800">
+                        <button onclick="confirmDelete({{ reporter.id }}, '{{ reporter.name | e }}')" class="text-red-600 hover:text-red-800">
                             Eliminar
                         </button>
                     </td>
