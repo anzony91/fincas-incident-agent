@@ -217,8 +217,10 @@ async def seed_reporters_from_tickets(
     """
     Create reporters from existing ticket data.
     Only creates reporters for emails that don't exist yet.
+    Skips emails that belong to providers to avoid mixing data.
     """
     from app.models.ticket import Ticket
+    from app.models.provider import Provider
     
     # Get all tickets with reporter info
     tickets_result = await db.execute(
@@ -228,9 +230,18 @@ async def seed_reporters_from_tickets(
     
     created = []
     skipped = []
+    skipped_provider = []
     
     for ticket in tickets:
         email = ticket.reporter_email.lower().strip()
+        
+        # Check if email belongs to a provider - skip to avoid mixing data
+        provider_check = await db.execute(
+            select(Provider).where(Provider.email == email)
+        )
+        if provider_check.scalar_one_or_none():
+            skipped_provider.append(email)
+            continue
         
         # Check if reporter already exists
         existing = await db.execute(
@@ -262,5 +273,6 @@ async def seed_reporters_from_tickets(
     return {
         "created": len(created),
         "skipped": len(skipped),
+        "skipped_provider_emails": len(skipped_provider),
         "details": created,
     }

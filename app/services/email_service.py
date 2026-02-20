@@ -327,11 +327,12 @@ class EmailService:
             
             return ticket, email_record
         
-        # New ticket - first, find or create the reporter
+        # New ticket - first, find or create the reporter (None if email is a provider)
         reporter = await self._find_or_create_reporter(from_address, from_name)
         
         # Now analyze with AI
-        logger.info("Processing new incident email from %s (Reporter: %s)", from_address, reporter.name)
+        reporter_name_log = reporter.name if reporter else "(provider email)"
+        logger.info("Processing new incident email from %s (Reporter: %s)", from_address, reporter_name_log)
         
         # Get conversation history (empty for new ticket)
         conversation_history = []
@@ -354,11 +355,19 @@ class EmailService:
         community = self.classifier.extract_community_name(from_address, body_text or "")
         
         # Pre-fill from known reporter data (intelligent matching)
-        reporter_name_to_use = from_name or reporter.name
-        reporter_phone_to_use = reporter.phone  # Use stored phone if available
-        community_to_use = reporter.community_name or community
-        address_to_use = reporter.address
-        floor_door_to_use = reporter.floor_door
+        # If reporter is None (email belongs to provider), use only email data
+        if reporter:
+            reporter_name_to_use = from_name or reporter.name
+            reporter_phone_to_use = reporter.phone  # Use stored phone if available
+            community_to_use = reporter.community_name or community
+            address_to_use = reporter.address
+            floor_door_to_use = reporter.floor_door
+        else:
+            reporter_name_to_use = from_name
+            reporter_phone_to_use = None
+            community_to_use = community
+            address_to_use = None
+            floor_door_to_use = None
         
         # Determine initial status based on info completeness
         initial_status = TicketStatus.NEW if analysis.has_complete_info else TicketStatus.NEEDS_INFO
@@ -449,14 +458,24 @@ class EmailService:
         self,
         email: str,
         name: Optional[str] = None,
-    ) -> Reporter:
+    ) -> Optional[Reporter]:
         """Find an existing reporter by email or create a new one.
         
         This allows us to centralize reporter data and pre-fill ticket information
         for known reporters.
+        
+        Returns None if the email belongs to a provider (to avoid mixing data).
         """
         # Normalize email
         email_lower = email.lower().strip()
+        
+        # Check if this email belongs to a provider - don't create reporter in that case
+        provider_check = await self.db.execute(
+            select(Provider).where(Provider.email == email_lower)
+        )
+        if provider_check.scalar_one_or_none():
+            logger.info("Email %s belongs to a provider, skipping reporter creation", email_lower)
+            return None
         
         # Try to find existing reporter
         result = await self.db.execute(
@@ -483,7 +502,7 @@ class EmailService:
     
     async def _update_reporter_from_ticket(
         self,
-        reporter: Reporter,
+        reporter: Optional[Reporter],
         ticket: Ticket,
         extracted_info: dict,
     ) -> None:
@@ -491,7 +510,12 @@ class EmailService:
         
         This keeps reporter data up-to-date as we learn more about them
         from their incident reports.
+        
+        Does nothing if reporter is None (e.g., email belongs to a provider).
         """
+        if reporter is None:
+            return
+        
         updated = False
         
         # Update name if we have a better one
