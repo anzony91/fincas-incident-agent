@@ -27,6 +27,7 @@ from app.models.attachment import Attachment
 from app.models.email import Email, EmailDirection
 from app.models.event import Event
 from app.models.provider import Provider
+from app.models.reporter import Reporter
 from app.models.ticket import Ticket, TicketStatus
 from app.schemas import TicketCreate
 from app.services.classifier_service import ClassifierService
@@ -326,8 +327,11 @@ class EmailService:
             
             return ticket, email_record
         
-        # New ticket - analyze with AI
-        logger.info("Processing new incident email from %s", from_address)
+        # New ticket - first, find or create the reporter
+        reporter = await self._find_or_create_reporter(from_address, from_name)
+        
+        # Now analyze with AI
+        logger.info("Processing new incident email from %s (Reporter: %s)", from_address, reporter.name)
         
         # Get conversation history (empty for new ticket)
         conversation_history = []
@@ -349,6 +353,13 @@ class EmailService:
         priority = analysis.priority or self.classifier.classify_email(subject, body_text or "")[1]
         community = self.classifier.extract_community_name(from_address, body_text or "")
         
+        # Pre-fill from known reporter data (intelligent matching)
+        reporter_name_to_use = from_name or reporter.name
+        reporter_phone_to_use = reporter.phone  # Use stored phone if available
+        community_to_use = reporter.community_name or community
+        address_to_use = reporter.address
+        floor_door_to_use = reporter.floor_door
+        
         # Determine initial status based on info completeness
         initial_status = TicketStatus.NEW if analysis.has_complete_info else TicketStatus.NEEDS_INFO
         
@@ -367,7 +378,7 @@ class EmailService:
             ],
         }
         
-        # Create ticket
+        # Create ticket with pre-filled reporter data
         ticket_service = TicketService(self.db)
         ticket = await ticket_service.create_ticket(TicketCreate(
             subject=subject,
@@ -375,15 +386,18 @@ class EmailService:
             category=category,
             priority=priority,
             reporter_email=from_address,
-            reporter_name=from_name,
-            community_name=community,
+            reporter_name=reporter_name_to_use,
+            reporter_phone=reporter_phone_to_use,
+            community_name=community_to_use,
+            address=address_to_use,
+            location_detail=floor_door_to_use,
         ))
         
         # Update ticket with AI context and status
         ticket.status = initial_status
         ticket.ai_context = ai_context
         
-        # Update extracted location info if available
+        # Update extracted location info if available (override pre-filled with fresh data)
         extracted = analysis.extracted_info
         if extracted.get("address"):
             ticket.address = extracted["address"]
@@ -393,6 +407,9 @@ class EmailService:
             ticket.reporter_phone = extracted["reporter_phone"]
         if extracted.get("reporter_name") and not ticket.reporter_name:
             ticket.reporter_name = extracted["reporter_name"]
+        
+        # Update reporter with any new information extracted from this ticket
+        await self._update_reporter_from_ticket(reporter, ticket, extracted)
         
         await self.db.commit()
         await self.db.refresh(ticket)
@@ -427,6 +444,88 @@ class EmailService:
                 logger.warning("Ticket %s marked incomplete but no questions/fields to ask", ticket.ticket_code)
         
         return ticket, email_record
+    
+    async def _find_or_create_reporter(
+        self,
+        email: str,
+        name: Optional[str] = None,
+    ) -> Reporter:
+        """Find an existing reporter by email or create a new one.
+        
+        This allows us to centralize reporter data and pre-fill ticket information
+        for known reporters.
+        """
+        # Normalize email
+        email_lower = email.lower().strip()
+        
+        # Try to find existing reporter
+        result = await self.db.execute(
+            select(Reporter).where(Reporter.email == email_lower)
+        )
+        reporter = result.scalar_one_or_none()
+        
+        if reporter:
+            logger.info("Found existing reporter: %s (%s)", reporter.name, reporter.email)
+            return reporter
+        
+        # Create new reporter with minimal info
+        reporter = Reporter(
+            name=name or email_lower.split('@')[0],  # Use email prefix as fallback name
+            email=email_lower,
+            is_active=True,
+        )
+        self.db.add(reporter)
+        await self.db.commit()
+        await self.db.refresh(reporter)
+        
+        logger.info("Created new reporter: %s (%s)", reporter.name, reporter.email)
+        return reporter
+    
+    async def _update_reporter_from_ticket(
+        self,
+        reporter: Reporter,
+        ticket: Ticket,
+        extracted_info: dict,
+    ) -> None:
+        """Update reporter record with any new information from the ticket.
+        
+        This keeps reporter data up-to-date as we learn more about them
+        from their incident reports.
+        """
+        updated = False
+        
+        # Update name if we have a better one
+        if ticket.reporter_name and (not reporter.name or reporter.name == reporter.email.split('@')[0]):
+            reporter.name = ticket.reporter_name
+            updated = True
+        
+        # Update phone from extracted info or ticket
+        phone = extracted_info.get("reporter_phone") or ticket.reporter_phone
+        if phone and not reporter.phone:
+            reporter.phone = phone
+            updated = True
+        
+        # Update community name
+        if ticket.community_name and not reporter.community_name:
+            reporter.community_name = ticket.community_name
+            updated = True
+        
+        # Update address from extracted info or ticket
+        address = extracted_info.get("address") or ticket.address
+        if address and not reporter.address:
+            reporter.address = address
+            updated = True
+        
+        # Update floor/door from extracted location_detail
+        location_detail = extracted_info.get("location_detail") or ticket.location_detail
+        if location_detail and not reporter.floor_door:
+            # Try to extract floor/door info from location_detail
+            reporter.floor_door = location_detail
+            updated = True
+        
+        if updated:
+            await self.db.commit()
+            logger.info("Updated reporter %s with new information", reporter.email)
     
     async def _store_email(
         self,
