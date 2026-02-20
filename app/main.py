@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.database import close_db, init_db
-from app.routers import emails, events, providers, tickets, dashboard
+from app.routers import emails, events, providers, tickets, dashboard, reporters
 
 settings = get_settings()
 
@@ -66,6 +66,7 @@ app.add_middleware(
 # Include routers
 app.include_router(tickets.router, prefix="/api/tickets", tags=["Tickets"])
 app.include_router(providers.router, prefix="/api/providers", tags=["Providers"])
+app.include_router(reporters.router, prefix="/api/reporters", tags=["Reporters"])
 app.include_router(emails.router, prefix="/api/emails", tags=["Emails"])
 app.include_router(events.router, prefix="/api/events", tags=["Events"])
 app.include_router(dashboard.router)

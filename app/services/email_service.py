@@ -616,10 +616,37 @@ class EmailService:
         references: Optional[str],
         from_address: str,
     ) -> Optional[Ticket]:
-        """Find an existing ticket based on email threading or subject"""
+        """Find an existing ticket based on email threading or subject.
         
-        # Check by In-Reply-To header
+        Rules for ticket association:
+        1. Only associate if ticket is NOT closed (closed tickets = new incident)
+        2. Only associate if ticket is recent (< 30 days old)
+        3. Prioritize ticket code in subject over email threading headers
+        """
+        from datetime import timedelta
+        
+        # First priority: Check for ticket code in subject (most reliable)
+        # e.g., "Re: [INC-ABC123] Your issue" or just "INC-ABC123"
+        ticket_code_match = re.search(r'\[?(INC-[A-Z0-9]{6})\]?', subject)
+        if ticket_code_match:
+            ticket_code = ticket_code_match.group(1)
+            logger.info("Found ticket code %s in subject", ticket_code)
+            result = await self.db.execute(
+                select(Ticket).where(Ticket.ticket_code == ticket_code)
+            )
+            ticket = result.scalar_one_or_none()
+            if ticket:
+                # Only use this ticket if it's not closed
+                if ticket.status != TicketStatus.CLOSED:
+                    logger.info("Associating email with ticket %s (found by subject code)", ticket_code)
+                    return ticket
+                else:
+                    logger.info("Ticket %s is CLOSED, will create new ticket", ticket_code)
+                    return None
+        
+        # Second priority: Check by In-Reply-To header
         if in_reply_to:
+            logger.debug("Checking In-Reply-To: %s", in_reply_to)
             result = await self.db.execute(
                 select(Email).where(Email.message_id == in_reply_to)
             )
@@ -628,30 +655,58 @@ class EmailService:
                 ticket_result = await self.db.execute(
                     select(Ticket).where(Ticket.id == original_email.ticket_id)
                 )
-                return ticket_result.scalar_one_or_none()
+                ticket = ticket_result.scalar_one_or_none()
+                if ticket:
+                    # Only use if not closed and recent
+                    age = datetime.utcnow() - ticket.created_at.replace(tzinfo=None)
+                    if ticket.status == TicketStatus.CLOSED:
+                        logger.info("Ticket %s is CLOSED, creating new ticket", ticket.ticket_code)
+                        return None
+                    elif age > timedelta(days=30):
+                        logger.info("Ticket %s is too old (%d days), creating new ticket", 
+                                   ticket.ticket_code, age.days)
+                        return None
+                    else:
+                        logger.info("Associating email with ticket %s (found by In-Reply-To)", 
+                                   ticket.ticket_code)
+                        return ticket
         
-        # Check references header for any known message
+        # Third priority: Check references header
         if references:
             for ref in references.split():
+                ref = ref.strip()
+                if not ref:
+                    continue
+                    
+                # Skip our own system-generated message IDs
+                if "@fincas-agent>" in ref:
+                    continue
+                    
                 result = await self.db.execute(
-                    select(Email).where(Email.message_id == ref.strip())
+                    select(Email).where(Email.message_id == ref)
                 )
                 ref_email = result.scalar_one_or_none()
                 if ref_email:
                     ticket_result = await self.db.execute(
                         select(Ticket).where(Ticket.id == ref_email.ticket_id)
                     )
-                    return ticket_result.scalar_one_or_none()
+                    ticket = ticket_result.scalar_one_or_none()
+                    if ticket:
+                        age = datetime.utcnow() - ticket.created_at.replace(tzinfo=None)
+                        if ticket.status == TicketStatus.CLOSED:
+                            logger.info("Ticket %s (from References) is CLOSED, skipping", 
+                                       ticket.ticket_code)
+                            continue
+                        elif age > timedelta(days=30):
+                            logger.info("Ticket %s (from References) is too old, skipping", 
+                                       ticket.ticket_code)
+                            continue
+                        else:
+                            logger.info("Associating email with ticket %s (found by References)", 
+                                       ticket.ticket_code)
+                            return ticket
         
-        # Check for ticket code in subject (e.g., "Re: [INC-ABC123] Your issue")
-        ticket_code_match = re.search(r'\[?(INC-[A-Z0-9]{6})\]?', subject)
-        if ticket_code_match:
-            ticket_code = ticket_code_match.group(1)
-            result = await self.db.execute(
-                select(Ticket).where(Ticket.ticket_code == ticket_code)
-            )
-            return result.scalar_one_or_none()
-        
+        logger.info("No existing ticket found for email from %s, will create new", from_address)
         return None
     
     async def _save_attachments(

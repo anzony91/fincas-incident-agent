@@ -5,62 +5,629 @@
 <div class="space-y-6">
     <!-- Header -->
     <div class="flex justify-between items-center">
-        <h1 class="text-2xl font-bold text-gray-900">Proveedores</h1>
-        <span class="text-sm text-gray-500">{{ providers | length }} proveedores registrados</span>
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Proveedores</h1>
+            <p class="text-sm text-gray-500 mt-1">Gestión de proveedores de servicios</p>
+        </div>
+        <button onclick="openModal('createModal')" class="bg-primary hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Nuevo Proveedor
+        </button>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="text-sm text-gray-500">Total Proveedores</div>
+            <div class="text-2xl font-bold text-gray-900">{{ stats.total }}</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="text-sm text-gray-500">Activos</div>
+            <div class="text-2xl font-bold text-green-600">{{ stats.active }}</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="text-sm text-gray-500">Con urgencias 24h</div>
+            <div class="text-2xl font-bold text-orange-600">{{ stats.emergency }}</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="text-sm text-gray-500">Categorías cubiertas</div>
+            <div class="text-2xl font-bold text-blue-600">{{ stats.categories }}</div>
+        </div>
+    </div>
+
+    <!-- Search and Filters -->
+    <div class="bg-white rounded-lg shadow p-4">
+        <form method="get" class="flex flex-wrap gap-4 items-end">
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
+                <input type="text" name="search" value="{{ search or '' }}" placeholder="Nombre, email, teléfono..." 
+                       class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+            </div>
+            <div class="w-48">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                <select name="category" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                    <option value="">Todas</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>{{ cat | replace('_', ' ') }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="w-32">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                <select name="is_active" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                    <option value="">Todos</option>
+                    <option value="true" {% if is_active == 'true' %}selected{% endif %}>Activos</option>
+                    <option value="false" {% if is_active == 'false' %}selected{% endif %}>Inactivos</option>
+                </select>
+            </div>
+            <button type="submit" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg">
+                Filtrar
+            </button>
+            <a href="/dashboard/providers" class="text-gray-500 hover:text-gray-700 py-2 px-2">Limpiar</a>
+        </form>
     </div>
 
     <!-- Providers Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {% for provider in providers %}
-        <div class="bg-white rounded-lg shadow hover:shadow-md transition-shadow p-6">
-            <div class="flex justify-between items-start mb-4">
-                <div>
-                    <h3 class="text-lg font-semibold text-gray-900">{{ provider.name }}</h3>
-                    <span class="text-sm text-gray-500">
-                        {% if provider.category.value == 'WATER' %}💧{% elif provider.category.value == 'ELEVATOR' %}🛗{% elif provider.category.value == 'ELECTRICITY' %}⚡{% elif provider.category.value == 'GARAGE_DOOR' %}🚗{% elif provider.category.value == 'CLEANING' %}🧹{% elif provider.category.value == 'SECURITY' %}🔒{% else %}📋{% endif %}
-                        {{ provider.category.value | replace('_', ' ') }}
-                    </span>
+        <div class="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+            <div class="p-6">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-2xl">
+                            {% if provider.category.value == 'WATER' %}💧
+                            {% elif provider.category.value == 'ELEVATOR' %}🛗
+                            {% elif provider.category.value == 'ELECTRICITY' %}⚡
+                            {% elif provider.category.value == 'GARAGE_DOOR' %}🚗
+                            {% elif provider.category.value == 'CLEANING' %}🧹
+                            {% elif provider.category.value == 'SECURITY' %}🔒
+                            {% else %}📋{% endif %}
+                        </div>
+                        <div class="ml-4">
+                            <h3 class="text-lg font-semibold text-gray-900">{{ provider.name }}</h3>
+                            {% if provider.company_name %}
+                            <p class="text-sm text-gray-500">{{ provider.company_name }}</p>
+                            {% endif %}
+                            <span class="text-xs text-gray-400">{{ provider.category.value | replace('_', ' ') }}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {% if provider.is_default %}
+                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                            Por defecto
+                        </span>
+                        {% endif %}
+                        <span class="px-2 py-1 text-xs font-semibold rounded-full {% if provider.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                            {% if provider.is_active %}Activo{% else %}Inactivo{% endif %}
+                        </span>
+                    </div>
                 </div>
-                <span class="px-2 py-1 text-xs font-semibold rounded-full {% if provider.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
-                    {% if provider.is_active %}Activo{% else %}Inactivo{% endif %}
-                </span>
+                
+                <div class="grid grid-cols-2 gap-4 text-sm mb-4">
+                    <div>
+                        <p class="text-gray-500 text-xs uppercase">Contacto Principal</p>
+                        {% if provider.contact_person %}
+                        <p class="font-medium">{{ provider.contact_person }}</p>
+                        {% endif %}
+                        {% if provider.phone %}
+                        <a href="tel:{{ provider.phone }}" class="text-primary hover:underline">{{ provider.phone }}</a>
+                        {% endif %}
+                    </div>
+                    <div>
+                        {% if provider.phone_emergency %}
+                        <p class="text-gray-500 text-xs uppercase">Urgencias 24h</p>
+                        <a href="tel:{{ provider.phone_emergency }}" class="text-red-600 font-semibold hover:underline">{{ provider.phone_emergency }}</a>
+                        {% elif provider.phone_secondary %}
+                        <p class="text-gray-500 text-xs uppercase">Tel. Secundario</p>
+                        <a href="tel:{{ provider.phone_secondary }}" class="text-primary hover:underline">{{ provider.phone_secondary }}</a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if provider.email %}
+                <div class="text-sm mb-4">
+                    <a href="mailto:{{ provider.email }}" class="text-primary hover:underline">{{ provider.email }}</a>
+                </div>
+                {% endif %}
+
+                {% if provider.specialties or provider.service_areas %}
+                <div class="text-sm text-gray-600 mb-4">
+                    {% if provider.specialties %}
+                    <p><span class="text-gray-500">Especialidades:</span> {{ provider.specialties }}</p>
+                    {% endif %}
+                    {% if provider.service_areas %}
+                    <p><span class="text-gray-500">Zonas:</span> {{ provider.service_areas }}</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if provider.availability_hours or provider.has_emergency_service %}
+                <div class="flex items-center gap-4 text-sm text-gray-500 mb-4">
+                    {% if provider.availability_hours %}
+                    <span>🕐 {{ provider.availability_hours }}</span>
+                    {% endif %}
+                    {% if provider.has_emergency_service %}
+                    <span class="text-red-600">🚨 Servicio urgencias</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if provider.rating %}
+                <div class="flex items-center gap-1 mb-4">
+                    {% for i in range(5) %}
+                    <svg class="h-4 w-4 {% if i < provider.rating %}text-yellow-400{% else %}text-gray-300{% endif %}" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                    </svg>
+                    {% endfor %}
+                    <span class="text-sm text-gray-500 ml-1">{{ provider.rating }}</span>
+                </div>
+                {% endif %}
             </div>
             
-            <div class="space-y-2 text-sm">
-                {% if provider.phone %}
-                <div class="flex items-center gap-2 text-gray-600">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                    <a href="tel:{{ provider.phone }}" class="text-primary hover:underline">{{ provider.phone }}</a>
-                </div>
-                {% endif %}
-                
-                {% if provider.email %}
-                <div class="flex items-center gap-2 text-gray-600">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                    <a href="mailto:{{ provider.email }}" class="text-primary hover:underline truncate">{{ provider.email }}</a>
-                </div>
-                {% endif %}
-                
-                {% if provider.notes %}
-                <div class="mt-3 pt-3 border-t border-gray-100">
-                    <p class="text-gray-500 text-xs">{{ provider.notes }}</p>
-                </div>
-                {% endif %}
+            <div class="border-t px-6 py-3 bg-gray-50 flex justify-end gap-2">
+                <button onclick="openViewModal({{ provider | tojson }})" class="text-gray-600 hover:text-gray-800 text-sm">
+                    Ver detalles
+                </button>
+                <button onclick="openEditModal({{ provider | tojson }})" class="text-primary hover:text-blue-700 text-sm">
+                    Editar
+                </button>
+                <button onclick="confirmDelete({{ provider.id }}, '{{ provider.name }}')" class="text-red-600 hover:text-red-800 text-sm">
+                    Eliminar
+                </button>
             </div>
         </div>
         {% else %}
-        <div class="col-span-full text-center py-12 text-gray-500">
+        <div class="col-span-full text-center py-12 text-gray-500 bg-white rounded-lg shadow">
             <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
             <p class="mt-2">No hay proveedores registrados</p>
-            <p class="text-sm">Usa la API para crear proveedores: POST /api/providers</p>
+            <p class="text-sm">Haz clic en "Nuevo Proveedor" para añadir el primero</p>
         </div>
         {% endfor %}
     </div>
 </div>
+
+<!-- Create Modal -->
+<div id="createModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-5 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-lg bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold">Nuevo Proveedor</h3>
+            <button onclick="closeModal('createModal')" class="text-gray-400 hover:text-gray-600">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <form method="post" action="/dashboard/providers/create">
+            <div class="grid grid-cols-3 gap-4">
+                <!-- Basic Info -->
+                <div class="col-span-3 border-b pb-2 mb-2">
+                    <h4 class="text-sm font-semibold text-gray-700">Información básica</h4>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                    <input type="text" name="name" required class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Razón Social</label>
+                    <input type="text" name="company_name" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">CIF/NIF</label>
+                    <input type="text" name="cif_nif" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Categoría *</label>
+                    <select name="category" required class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                        {% for cat in categories %}
+                        <option value="{{ cat }}">{{ cat | replace('_', ' ') }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                    <input type="email" name="email" required class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div class="flex items-center gap-4 pt-6">
+                    <label class="flex items-center">
+                        <input type="checkbox" name="is_default" value="true" class="rounded border-gray-300 text-primary focus:ring-primary">
+                        <span class="ml-2 text-sm text-gray-700">Por defecto</span>
+                    </label>
+                </div>
+
+                <!-- Contact Info -->
+                <div class="col-span-3 border-b pb-2 mb-2 mt-4">
+                    <h4 class="text-sm font-semibold text-gray-700">Contacto</h4>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Persona de contacto</label>
+                    <input type="text" name="contact_person" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Cargo</label>
+                    <input type="text" name="contact_position" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono principal</label>
+                    <input type="tel" name="phone" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono secundario</label>
+                    <input type="tel" name="phone_secondary" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono urgencias 24h</label>
+                    <input type="tel" name="phone_emergency" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div class="flex items-center pt-6">
+                    <label class="flex items-center">
+                        <input type="checkbox" name="has_emergency_service" value="true" class="rounded border-gray-300 text-primary focus:ring-primary">
+                        <span class="ml-2 text-sm text-gray-700">Servicio de urgencias</span>
+                    </label>
+                </div>
+
+                <!-- Address -->
+                <div class="col-span-3 border-b pb-2 mb-2 mt-4">
+                    <h4 class="text-sm font-semibold text-gray-700">Dirección</h4>
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
+                    <input type="text" name="address" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Ciudad</label>
+                    <input type="text" name="city" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Código postal</label>
+                    <input type="text" name="postal_code" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+
+                <!-- Service Info -->
+                <div class="col-span-3 border-b pb-2 mb-2 mt-4">
+                    <h4 class="text-sm font-semibold text-gray-700">Servicio</h4>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Especialidades</label>
+                    <input type="text" name="specialties" placeholder="Ej: Calderas, ACS" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Zonas de cobertura</label>
+                    <input type="text" name="service_areas" placeholder="Ej: Madrid, Alcorcón" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Horario</label>
+                    <input type="text" name="availability_hours" placeholder="Ej: L-V 8:00-18:00" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+
+                <!-- Financial -->
+                <div class="col-span-3 border-b pb-2 mb-2 mt-4">
+                    <h4 class="text-sm font-semibold text-gray-700">Información financiera</h4>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Tarifa por hora (€)</label>
+                    <input type="number" step="0.01" name="hourly_rate" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Condiciones de pago</label>
+                    <input type="text" name="payment_terms" placeholder="Ej: 30 días" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">IBAN</label>
+                    <input type="text" name="bank_account" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+
+                <div class="col-span-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+                    <textarea name="notes" rows="2" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="closeModal('createModal')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                    Cancelar
+                </button>
+                <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700">
+                    Crear Proveedor
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-5 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-lg bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold">Editar Proveedor</h3>
+            <button onclick="closeModal('editModal')" class="text-gray-400 hover:text-gray-600">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <form method="post" id="editForm">
+            <input type="hidden" name="provider_id" id="edit_provider_id">
+            <div class="grid grid-cols-3 gap-4">
+                <!-- Basic Info -->
+                <div class="col-span-3 border-b pb-2 mb-2">
+                    <h4 class="text-sm font-semibold text-gray-700">Información básica</h4>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                    <input type="text" name="name" id="edit_name" required class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Razón Social</label>
+                    <input type="text" name="company_name" id="edit_company_name" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">CIF/NIF</label>
+                    <input type="text" name="cif_nif" id="edit_cif_nif" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Categoría *</label>
+                    <select name="category" id="edit_category" required class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                        {% for cat in categories %}
+                        <option value="{{ cat }}">{{ cat | replace('_', ' ') }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                    <input type="email" name="email" id="edit_email" required class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div class="flex items-center gap-4 pt-6">
+                    <label class="flex items-center">
+                        <input type="checkbox" name="is_default" id="edit_is_default" value="true" class="rounded border-gray-300 text-primary focus:ring-primary">
+                        <span class="ml-2 text-sm text-gray-700">Por defecto</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="checkbox" name="is_active" id="edit_is_active" value="true" class="rounded border-gray-300 text-primary focus:ring-primary">
+                        <span class="ml-2 text-sm text-gray-700">Activo</span>
+                    </label>
+                </div>
+
+                <!-- Contact Info -->
+                <div class="col-span-3 border-b pb-2 mb-2 mt-4">
+                    <h4 class="text-sm font-semibold text-gray-700">Contacto</h4>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Persona de contacto</label>
+                    <input type="text" name="contact_person" id="edit_contact_person" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Cargo</label>
+                    <input type="text" name="contact_position" id="edit_contact_position" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono principal</label>
+                    <input type="tel" name="phone" id="edit_phone" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono secundario</label>
+                    <input type="tel" name="phone_secondary" id="edit_phone_secondary" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono urgencias 24h</label>
+                    <input type="tel" name="phone_emergency" id="edit_phone_emergency" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div class="flex items-center pt-6">
+                    <label class="flex items-center">
+                        <input type="checkbox" name="has_emergency_service" id="edit_has_emergency_service" value="true" class="rounded border-gray-300 text-primary focus:ring-primary">
+                        <span class="ml-2 text-sm text-gray-700">Servicio de urgencias</span>
+                    </label>
+                </div>
+
+                <!-- Address -->
+                <div class="col-span-3 border-b pb-2 mb-2 mt-4">
+                    <h4 class="text-sm font-semibold text-gray-700">Dirección</h4>
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
+                    <input type="text" name="address" id="edit_address" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Ciudad</label>
+                    <input type="text" name="city" id="edit_city" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Código postal</label>
+                    <input type="text" name="postal_code" id="edit_postal_code" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+
+                <!-- Service Info -->
+                <div class="col-span-3 border-b pb-2 mb-2 mt-4">
+                    <h4 class="text-sm font-semibold text-gray-700">Servicio</h4>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Especialidades</label>
+                    <input type="text" name="specialties" id="edit_specialties" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Zonas de cobertura</label>
+                    <input type="text" name="service_areas" id="edit_service_areas" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Horario</label>
+                    <input type="text" name="availability_hours" id="edit_availability_hours" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Valoración (1-5)</label>
+                    <input type="number" step="0.1" min="1" max="5" name="rating" id="edit_rating" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+
+                <!-- Financial -->
+                <div class="col-span-3 border-b pb-2 mb-2 mt-4">
+                    <h4 class="text-sm font-semibold text-gray-700">Información financiera</h4>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Tarifa por hora (€)</label>
+                    <input type="number" step="0.01" name="hourly_rate" id="edit_hourly_rate" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Condiciones de pago</label>
+                    <input type="text" name="payment_terms" id="edit_payment_terms" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">IBAN</label>
+                    <input type="text" name="bank_account" id="edit_bank_account" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                </div>
+
+                <div class="col-span-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+                    <textarea name="notes" id="edit_notes" rows="2" class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="closeModal('editModal')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                    Cancelar
+                </button>
+                <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700">
+                    Guardar Cambios
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- View Modal -->
+<div id="viewModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-10 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-lg bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold" id="view_title">Detalles del Proveedor</h3>
+            <button onclick="closeModal('viewModal')" class="text-gray-400 hover:text-gray-600">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div id="viewContent" class="space-y-4">
+            <!-- Content will be dynamically inserted -->
+        </div>
+        <div class="flex justify-end mt-6">
+            <button onclick="closeModal('viewModal')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                Cerrar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-lg bg-white">
+        <div class="text-center">
+            <svg class="mx-auto h-12 w-12 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <h3 class="text-lg font-semibold text-gray-900 mt-4">¿Eliminar proveedor?</h3>
+            <p class="text-gray-500 mt-2" id="deleteModalText">¿Estás seguro de que deseas eliminar este proveedor?</p>
+            <div class="flex justify-center gap-3 mt-6">
+                <button onclick="closeModal('deleteModal')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                    Cancelar
+                </button>
+                <form method="post" id="deleteForm" style="display: inline;">
+                    <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                        Eliminar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openModal(id) {
+    document.getElementById(id).classList.remove('hidden');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.add('hidden');
+}
+
+function openEditModal(provider) {
+    document.getElementById('edit_provider_id').value = provider.id;
+    document.getElementById('edit_name').value = provider.name || '';
+    document.getElementById('edit_company_name').value = provider.company_name || '';
+    document.getElementById('edit_cif_nif').value = provider.cif_nif || '';
+    document.getElementById('edit_category').value = provider.category || '';
+    document.getElementById('edit_email').value = provider.email || '';
+    document.getElementById('edit_is_default').checked = provider.is_default;
+    document.getElementById('edit_is_active').checked = provider.is_active;
+    document.getElementById('edit_contact_person').value = provider.contact_person || '';
+    document.getElementById('edit_contact_position').value = provider.contact_position || '';
+    document.getElementById('edit_phone').value = provider.phone || '';
+    document.getElementById('edit_phone_secondary').value = provider.phone_secondary || '';
+    document.getElementById('edit_phone_emergency').value = provider.phone_emergency || '';
+    document.getElementById('edit_has_emergency_service').checked = provider.has_emergency_service;
+    document.getElementById('edit_address').value = provider.address || '';
+    document.getElementById('edit_city').value = provider.city || '';
+    document.getElementById('edit_postal_code').value = provider.postal_code || '';
+    document.getElementById('edit_specialties').value = provider.specialties || '';
+    document.getElementById('edit_service_areas').value = provider.service_areas || '';
+    document.getElementById('edit_availability_hours').value = provider.availability_hours || '';
+    document.getElementById('edit_rating').value = provider.rating || '';
+    document.getElementById('edit_hourly_rate').value = provider.hourly_rate || '';
+    document.getElementById('edit_payment_terms').value = provider.payment_terms || '';
+    document.getElementById('edit_bank_account').value = provider.bank_account || '';
+    document.getElementById('edit_notes').value = provider.notes || '';
+    document.getElementById('editForm').action = '/dashboard/providers/' + provider.id + '/update';
+    openModal('editModal');
+}
+
+function openViewModal(provider) {
+    document.getElementById('view_title').textContent = provider.name;
+    let html = '<div class="grid grid-cols-2 gap-4 text-sm">';
+    const fields = [
+        ['Razón Social', provider.company_name],
+        ['CIF/NIF', provider.cif_nif],
+        ['Categoría', provider.category?.replace('_', ' ')],
+        ['Email', provider.email],
+        ['Teléfono', provider.phone],
+        ['Tel. Secundario', provider.phone_secondary],
+        ['Tel. Urgencias', provider.phone_emergency],
+        ['Persona contacto', provider.contact_person],
+        ['Cargo', provider.contact_position],
+        ['Dirección', provider.address],
+        ['Ciudad', provider.city],
+        ['Código Postal', provider.postal_code],
+        ['Especialidades', provider.specialties],
+        ['Zonas', provider.service_areas],
+        ['Horario', provider.availability_hours],
+        ['Tarifa/hora', provider.hourly_rate ? provider.hourly_rate + '€' : null],
+        ['Pago', provider.payment_terms],
+        ['IBAN', provider.bank_account]
+    ];
+    fields.forEach(function([label, value]) {
+        if (value) {
+            html += '<div><span class="text-gray-500">' + label + ':</span> <span class="font-medium">' + value + '</span></div>';
+        }
+    });
+    html += '</div>';
+    if (provider.notes) {
+        html += '<div class="mt-4 pt-4 border-t"><span class="text-gray-500 text-sm">Notas:</span><p class="text-sm mt-1">' + provider.notes + '</p></div>';
+    }
+    document.getElementById('viewContent').innerHTML = html;
+    openModal('viewModal');
+}
+
+function confirmDelete(id, name) {
+    document.getElementById('deleteModalText').textContent = '¿Estás seguro de que deseas eliminar a "' + name + '"?';
+    document.getElementById('deleteForm').action = '/dashboard/providers/' + id + '/delete';
+    openModal('deleteModal');
+}
+
+// Close modal when clicking outside
+document.querySelectorAll('[id$="Modal"]').forEach(modal => {
+    modal.addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.classList.add('hidden');
+        }
+    });
+});
+</script>
 {% endblock %}
