@@ -208,3 +208,59 @@ async def get_community_stats(
     stats = result.all()
     
     return [{"community": s[0], "count": s[1]} for s in stats]
+
+
+@router.post("/seed-from-tickets")
+async def seed_reporters_from_tickets(
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create reporters from existing ticket data.
+    Only creates reporters for emails that don't exist yet.
+    """
+    from app.models.ticket import Ticket
+    
+    # Get all tickets with reporter info
+    tickets_result = await db.execute(
+        select(Ticket).where(Ticket.reporter_email.isnot(None))
+    )
+    tickets = tickets_result.scalars().all()
+    
+    created = []
+    skipped = []
+    
+    for ticket in tickets:
+        email = ticket.reporter_email.lower().strip()
+        
+        # Check if reporter already exists
+        existing = await db.execute(
+            select(Reporter).where(Reporter.email == email)
+        )
+        if existing.scalar_one_or_none():
+            skipped.append(email)
+            continue
+        
+        # Create new reporter from ticket data
+        reporter = Reporter(
+            name=ticket.reporter_name or email.split('@')[0],
+            email=email,
+            phone=ticket.reporter_phone,
+            community_name=ticket.community_name,
+            address=ticket.address,
+            floor_door=ticket.location_detail,
+            is_active=True,
+        )
+        db.add(reporter)
+        created.append({
+            "email": email,
+            "name": reporter.name,
+            "phone": reporter.phone,
+        })
+    
+    await db.commit()
+    
+    return {
+        "created": len(created),
+        "skipped": len(skipped),
+        "details": created,
+    }
