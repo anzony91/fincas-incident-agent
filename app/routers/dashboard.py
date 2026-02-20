@@ -209,6 +209,65 @@ async def ticket_detail(
     else:
         ticket.assigned_provider = None
     
+    # Clean up ai_context missing_fields - remove fields that already have values
+    if ticket.ai_context and ticket.ai_context.get('analysis'):
+        analysis = ticket.ai_context['analysis']
+        if analysis.get('missing_fields'):
+            # Mapping of common field name variations to ticket attributes
+            field_mapping = {
+                'address': lambda t: t.address,
+                'dirección': lambda t: t.address,
+                'direccion': lambda t: t.address,
+                'location_detail': lambda t: t.location_detail,
+                'ubicación': lambda t: t.location_detail,
+                'ubicacion': lambda t: t.location_detail,
+                'detalle de ubicación': lambda t: t.location_detail,
+                'detalle ubicación': lambda t: t.location_detail,
+                'piso/puerta': lambda t: t.location_detail,
+                'reporter_name': lambda t: t.reporter_name,
+                'nombre': lambda t: t.reporter_name,
+                'nombre del reportante': lambda t: t.reporter_name,
+                'reporter_contact': lambda t: t.reporter_email,
+                'teléfono': lambda t: ticket.ai_context.get('analysis', {}).get('extracted_info', {}).get('reporter_contact'),
+                'telefono': lambda t: ticket.ai_context.get('analysis', {}).get('extracted_info', {}).get('reporter_contact'),
+                'contacto': lambda t: t.reporter_email,
+                'comunidad': lambda t: t.community_name,
+                'community_name': lambda t: t.community_name,
+                'nombre de comunidad': lambda t: t.community_name,
+            }
+            
+            # Filter out fields that already have values
+            actual_missing = []
+            extracted_info = analysis.get('extracted_info', {})
+            
+            for field in analysis['missing_fields']:
+                field_lower = field.lower().strip()
+                
+                # Check if this field has a value in ticket or extracted_info
+                has_value = False
+                
+                # Check direct mapping
+                for key, getter in field_mapping.items():
+                    if key in field_lower or field_lower in key:
+                        value = getter(ticket)
+                        if value:
+                            has_value = True
+                            break
+                
+                # Also check extracted_info for this field
+                if not has_value:
+                    for info_key, info_value in extracted_info.items():
+                        if info_key.lower() in field_lower or field_lower in info_key.lower():
+                            if info_value:
+                                has_value = True
+                                break
+                
+                if not has_value:
+                    actual_missing.append(field)
+            
+            # Update the analysis with filtered missing_fields
+            analysis['missing_fields'] = actual_missing
+    
     return templates.TemplateResponse("ticket_detail.html", {
         "request": request,
         "ticket": ticket,
