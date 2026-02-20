@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incidencia Registrada - Fincas Incident Agent</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#6B7280',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-green-50 to-emerald-100 min-h-screen py-8 flex items-center">
+    <div class="max-w-xl mx-auto px-4">
+        <!-- Success Card -->
+        <div class="bg-white rounded-xl shadow-lg p-8 text-center">
+            <!-- Success Icon -->
+            <div class="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-6">
+                <svg class="w-10 h-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+            </div>
+            
+            <h1 class="text-2xl font-bold text-gray-900 mb-2">¡Incidencia Registrada!</h1>
+            <p class="text-gray-600 mb-6">Su incidencia ha sido recibida y será procesada lo antes posible.</p>
+            
+            <!-- Ticket Info -->
+            <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <div class="text-sm text-gray-500 mb-1">Código de seguimiento</div>
+                <div class="text-2xl font-mono font-bold text-primary">{{ ticket.ticket_code }}</div>
+            </div>
+            
+            <!-- Details -->
+            <div class="text-left space-y-3 mb-6">
+                <div class="flex items-start">
+                    <svg class="w-5 h-5 text-gray-400 mr-3 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                    </svg>
+                    <div>
+                        <div class="text-xs text-gray-500">Asunto</div>
+                        <div class="text-gray-900">{{ ticket.subject }}</div>
+                    </div>
+                </div>
+                
+                <div class="flex items-start">
+                    <svg class="w-5 h-5 text-gray-400 mr-3 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <div>
+                        <div class="text-xs text-gray-500">Categoría</div>
+                        <div class="text-gray-900">
+                            {% if ticket.category.value == 'PLUMBING' %}🔧 Fontanería
+                            {% elif ticket.category.value == 'ELECTRICITY' %}⚡ Electricidad
+                            {% elif ticket.category.value == 'ELEVATOR' %}🛗 Ascensor
+                            {% elif ticket.category.value == 'HVAC' %}❄️ Climatización
+                            {% elif ticket.category.value == 'STRUCTURAL' %}🏗️ Estructura
+                            {% elif ticket.category.value == 'COMMON_AREAS' %}🏢 Zonas comunes
+                            {% elif ticket.category.value == 'SECURITY' %}🔒 Seguridad
+                            {% elif ticket.category.value == 'CLEANING' %}🧹 Limpieza
+                            {% else %}📋 Otro
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex items-start">
+                    <svg class="w-5 h-5 text-gray-400 mr-3 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                        <div class="text-xs text-gray-500">Estado</div>
+                        <div>
+                            {% if ticket.status.value == 'NEW' %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Información completa - En proceso
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                Pendiente de información adicional
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {% if not analysis.has_complete_info and analysis.missing_fields %}
+            <!-- Missing Info Warning -->
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-left">
+                <div class="flex items-start">
+                    <svg class="w-5 h-5 text-yellow-600 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div>
+                        <div class="font-medium text-yellow-800">Información adicional necesaria</div>
+                        <div class="text-sm text-yellow-700 mt-1">
+                            Le contactaremos por email para solicitar:
+                            <ul class="list-disc list-inside mt-1">
+                                {% for field in analysis.missing_fields %}
+                                <li>{{ field }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Next Steps -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
+                <div class="font-medium text-blue-800 mb-2">¿Qué sucede ahora?</div>
+                <ul class="text-sm text-blue-700 space-y-1">
+                    {% if analysis.has_complete_info %}
+                    <li>✓ Su incidencia ya ha sido enviada al técnico correspondiente</li>
+                    <li>✓ Recibirá un email con la confirmación y los próximos pasos</li>
+                    <li>✓ El técnico se pondrá en contacto con usted para coordinar la visita</li>
+                    {% else %}
+                    <li>• Recibirá un email solicitando información adicional</li>
+                    <li>• Una vez complete los datos, se asignará un técnico</li>
+                    <li>• Puede responder directamente al email que recibirá</li>
+                    {% endif %}
+                </ul>
+            </div>
+            
+            <!-- Actions -->
+            <div class="mt-6 space-y-3">
+                <a href="/reportar" 
+                   class="block w-full bg-primary hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200">
+                    Reportar otra incidencia
+                </a>
+                <a href="/" 
+                   class="block w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 px-6 rounded-lg transition duration-200">
+                    Volver al inicio
+                </a>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="text-center mt-6 text-sm text-gray-500">
+            <p>Guarde el código <strong>{{ ticket.ticket_code }}</strong> para futuras consultas.</p>
+        </div>
+    </div>
+</body>
+</html>

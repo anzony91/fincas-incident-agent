@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reportar Incidencia - Fincas Incident Agent</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#6B7280',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen py-8">
+    <div class="max-w-2xl mx-auto px-4">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-full mb-4">
+                <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+            </div>
+            <h1 class="text-3xl font-bold text-gray-900">Reportar una Incidencia</h1>
+            <p class="text-gray-600 mt-2">Complete el formulario para notificar una avería o incidencia en su comunidad</p>
+        </div>
+
+        {% if error %}
+        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6" role="alert">
+            <div class="flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                <span>{{ error }}</span>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Form -->
+        <form method="post" action="/reportar" class="bg-white rounded-xl shadow-lg p-6 space-y-6">
+            <!-- Section: Datos de contacto -->
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Datos de contacto
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
+                        <input type="text" name="reporter_name" required 
+                               value="{{ form_data.reporter_name if form_data else '' }}"
+                               class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary"
+                               placeholder="Ej: María García López">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                        <input type="email" name="reporter_email" required
+                               value="{{ form_data.reporter_email if form_data else '' }}"
+                               class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary"
+                               placeholder="Ej: maria@email.com">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono de contacto *</label>
+                        <input type="tel" name="reporter_phone" required
+                               value="{{ form_data.reporter_phone if form_data else '' }}"
+                               class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary"
+                               placeholder="Ej: 612 345 678">
+                        <p class="text-xs text-gray-500 mt-1">Necesario para coordinar la visita del técnico</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Ubicación -->
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Ubicación
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Comunidad / Edificio</label>
+                        <input type="text" name="community_name"
+                               value="{{ form_data.community_name if form_data else '' }}"
+                               class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary"
+                               placeholder="Ej: Comunidad Jardines del Sur">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Piso / Puerta</label>
+                        <input type="text" name="floor_door"
+                               value="{{ form_data.floor_door if form_data else '' }}"
+                               class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary"
+                               placeholder="Ej: 3ºA">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Dirección completa</label>
+                        <input type="text" name="address"
+                               value="{{ form_data.address if form_data else '' }}"
+                               class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary"
+                               placeholder="Ej: Calle Mayor 25, Madrid">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Descripción de la incidencia -->
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    Descripción de la incidencia
+                </h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Asunto / Resumen breve *</label>
+                        <input type="text" name="subject" required
+                               value="{{ form_data.subject if form_data else '' }}"
+                               class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary"
+                               placeholder="Ej: Fuga de agua en el baño">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Descripción detallada *</label>
+                        <textarea name="description" required rows="5"
+                                  class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary"
+                                  placeholder="Describa el problema con el mayor detalle posible: qué ocurre, desde cuándo, dónde exactamente...">{{ form_data.description if form_data else '' }}</textarea>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de incidencia</label>
+                            <select name="category" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                                <option value="">Detectar automáticamente</option>
+                                <option value="PLUMBING" {% if form_data and form_data.category == 'PLUMBING' %}selected{% endif %}>🔧 Fontanería</option>
+                                <option value="ELECTRICITY" {% if form_data and form_data.category == 'ELECTRICITY' %}selected{% endif %}>⚡ Electricidad</option>
+                                <option value="ELEVATOR" {% if form_data and form_data.category == 'ELEVATOR' %}selected{% endif %}>🛗 Ascensor</option>
+                                <option value="HVAC" {% if form_data and form_data.category == 'HVAC' %}selected{% endif %}>❄️ Climatización</option>
+                                <option value="STRUCTURAL" {% if form_data and form_data.category == 'STRUCTURAL' %}selected{% endif %}>🏗️ Estructura</option>
+                                <option value="COMMON_AREAS" {% if form_data and form_data.category == 'COMMON_AREAS' %}selected{% endif %}>🏢 Zonas comunes</option>
+                                <option value="SECURITY" {% if form_data and form_data.category == 'SECURITY' %}selected{% endif %}>🔒 Seguridad</option>
+                                <option value="CLEANING" {% if form_data and form_data.category == 'CLEANING' %}selected{% endif %}>🧹 Limpieza</option>
+                                <option value="OTHER" {% if form_data and form_data.category == 'OTHER' %}selected{% endif %}>📋 Otro</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Urgencia</label>
+                            <select name="urgency" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                                <option value="medium" {% if not form_data or form_data.urgency == 'medium' %}selected{% endif %}>Normal</option>
+                                <option value="low" {% if form_data and form_data.urgency == 'low' %}selected{% endif %}>Baja - puede esperar</option>
+                                <option value="high" {% if form_data and form_data.urgency == 'high' %}selected{% endif %}>Alta - lo antes posible</option>
+                                <option value="urgent" {% if form_data and form_data.urgency == 'urgent' %}selected{% endif %}>Urgente - emergencia</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit -->
+            <div class="pt-4 border-t">
+                <button type="submit" 
+                        class="w-full bg-primary hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                    Enviar Incidencia
+                </button>
+                <p class="text-xs text-gray-500 text-center mt-3">
+                    Al enviar este formulario, acepta que procesemos sus datos para gestionar su incidencia.
+                </p>
+            </div>
+        </form>
+
+        <!-- Footer -->
+        <div class="text-center mt-6 text-sm text-gray-500">
+            <p>¿Tiene dudas? Puede escribirnos a <a href="mailto:incidencias@fincas.com" class="text-primary hover:underline">incidencias@fincas.com</a></p>
+        </div>
+    </div>
+</body>
+</html>
