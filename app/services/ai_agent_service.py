@@ -29,7 +29,7 @@ class IncidentAnalysis:
 
 REQUIRED_FIELDS = {
     "reporter_name": "Nombre de quien reporta",
-    "reporter_contact": "Teléfono o email de contacto",
+    "reporter_phone": "Número de teléfono de contacto",
     "address": "Dirección completa (calle y número)",
     "location_detail": "Ubicación específica (portal, piso, planta, etc.)",
     "problem_description": "Descripción del problema",
@@ -71,7 +71,7 @@ Tu tarea es analizar los reportes de incidencias que llegan y determinar:
 
 INFORMACIÓN REQUERIDA PARA CADA INCIDENCIA:
 - Nombre de quien reporta
-- Contacto (teléfono o email)
+- Número de teléfono de contacto (MUY IMPORTANTE - necesario para coordinar la visita del técnico)
 - Dirección completa del edificio
 - Ubicación específica del problema (portal, piso, planta, zona común, etc.)
 - Descripción clara del problema
@@ -100,7 +100,7 @@ Responde SIEMPRE en formato JSON con esta estructura exacta:
     "missing_fields": ["lista de campos que faltan"],
     "extracted_info": {
         "reporter_name": "valor o null",
-        "reporter_contact": "valor o null",
+        "reporter_phone": "número de teléfono o null",
         "address": "valor o null",
         "location_detail": "valor o null",
         "problem_description": "valor o null",
@@ -109,6 +109,8 @@ Responde SIEMPRE en formato JSON con esta estructura exacta:
     "follow_up_questions": ["preguntas a hacer al reportante"],
     "summary": "resumen breve del problema"
 }
+
+NOTA IMPORTANTE: El número de teléfono es ESENCIAL para poder contactar y coordinar la visita del técnico. Si no se proporciona, inclúyelo siempre en missing_fields.
 
 Sé amable y profesional. Las preguntas deben ser claras y en español."""
 

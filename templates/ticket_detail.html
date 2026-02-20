@@ -118,16 +118,20 @@
                     <h3 class="text-sm font-semibold text-gray-700 mb-2">📋 Información Extraída</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                         {% set extracted = analysis.get('extracted_info', {}) %}
-                        {% if extracted.get('reporter_name') %}
+                        {% if extracted.get('reporter_name') or ticket.reporter_name %}
                         <div class="flex">
                             <span class="text-gray-500 w-32">Reportante:</span>
-                            <span class="text-gray-900 font-medium">{{ extracted.reporter_name }}</span>
+                            <span class="text-gray-900 font-medium">{{ extracted.get('reporter_name') or ticket.reporter_name }}</span>
                         </div>
                         {% endif %}
-                        {% if extracted.get('reporter_contact') %}
+                        {% if extracted.get('reporter_phone') or ticket.reporter_phone %}
                         <div class="flex">
-                            <span class="text-gray-500 w-32">Contacto:</span>
-                            <span class="text-gray-900 font-medium">{{ extracted.reporter_contact }}</span>
+                            <span class="text-gray-500 w-32">Teléfono:</span>
+                            <span class="text-gray-900 font-medium">
+                                <a href="tel:{{ extracted.get('reporter_phone') or ticket.reporter_phone }}" class="text-primary hover:underline">
+                                    {{ extracted.get('reporter_phone') or ticket.reporter_phone }}
+                                </a>
+                            </span>
                         </div>
                         {% endif %}
                         {% if extracted.get('address') or ticket.address %}

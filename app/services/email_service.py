@@ -389,6 +389,10 @@ class EmailService:
             ticket.address = extracted["address"]
         if extracted.get("location_detail"):
             ticket.location_detail = extracted["location_detail"]
+        if extracted.get("reporter_phone"):
+            ticket.reporter_phone = extracted["reporter_phone"]
+        if extracted.get("reporter_name") and not ticket.reporter_name:
+            ticket.reporter_name = extracted["reporter_name"]
         
         await self.db.commit()
         await self.db.refresh(ticket)
@@ -561,6 +565,15 @@ class EmailService:
             
             subject = f"[{ticket.ticket_code}] Nueva incidencia de {category_name} - {priority_name}"
             
+            # Build contact info
+            reporter_info = ticket.reporter_name or ticket.reporter_email
+            contact_details = []
+            if ticket.reporter_phone:
+                contact_details.append(f"📞 Teléfono: {ticket.reporter_phone}")
+            if ticket.reporter_email:
+                contact_details.append(f"✉️ Email: {ticket.reporter_email}")
+            contact_str = "\n".join(contact_details) if contact_details else "No disponible"
+            
             body = f"""Estimado/a {provider.contact_person or provider.name},
 
 Se ha registrado una nueva incidencia que requiere su atención:
@@ -568,8 +581,11 @@ Se ha registrado una nueva incidencia que requiere su atención:
 📋 **Ticket:** {ticket.ticket_code}
 📂 **Categoría:** {category_name}
 ⚠️ **Prioridad:** {priority_name}
-📧 **Reportado por:** {ticket.reporter_name or ticket.reporter_email}
+👤 **Reportado por:** {reporter_info}
 🏢 **Comunidad:** {ticket.community_name or 'No especificada'}
+
+**Datos de contacto del solicitante:**
+{contact_str}
 
 **Asunto:**
 {ticket.subject}
@@ -699,6 +715,8 @@ Sistema de Gestión de Incidencias
                 ticket.location_detail = extracted["location_detail"]
             if extracted.get("reporter_name") and not ticket.reporter_name:
                 ticket.reporter_name = extracted["reporter_name"]
+            if extracted.get("reporter_phone") and not ticket.reporter_phone:
+                ticket.reporter_phone = extracted["reporter_phone"]
             
             # Update category/priority if AI determined better values
             if updated_analysis.category:
