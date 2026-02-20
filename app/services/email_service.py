@@ -26,6 +26,7 @@ from app.database import async_session_factory
 from app.models.attachment import Attachment
 from app.models.email import Email, EmailDirection
 from app.models.event import Event
+from app.models.provider import Provider
 from app.models.ticket import Ticket, TicketStatus
 from app.schemas import TicketCreate
 from app.services.classifier_service import ClassifierService
@@ -405,6 +406,10 @@ class EmailService:
         if attachments_data:
             await self._save_attachments(email_record, attachments_data, ticket.ticket_code)
         
+        # If info is complete, notify the default provider for this category
+        if analysis.has_complete_info:
+            await self._notify_default_provider(ticket)
+        
         # If info is incomplete, send follow-up email asking for more info
         if not analysis.has_complete_info:
             # Ensure we have follow-up questions
@@ -519,6 +524,123 @@ class EmailService:
             except Exception:
                 pass  # Don't fail if we can't create the event
     
+    async def _notify_default_provider(
+        self,
+        ticket: Ticket,
+    ) -> None:
+        """Notify the default provider for the ticket's category about the new incident.
+        
+        This is called when a ticket has complete information and is in NEW status.
+        It finds the default provider for the category and sends them an email
+        requesting assistance with the incident.
+        """
+        try:
+            # Find the default provider for this category
+            result = await self.db.execute(
+                select(Provider).where(
+                    (Provider.category == ticket.category) &
+                    (Provider.is_default == True) &  # noqa: E712
+                    (Provider.is_active == True)  # noqa: E712
+                )
+            )
+            provider = result.scalar_one_or_none()
+            
+            if not provider:
+                logger.info("No default provider found for category %s, skipping notification", ticket.category.value)
+                return
+            
+            logger.info("Notifying default provider %s (%s) for ticket %s",
+                       provider.name, provider.email, ticket.ticket_code)
+            
+            # Auto-assign the provider to the ticket
+            ticket.assigned_provider_id = provider.id
+            
+            # Build the email content
+            category_name = ticket.category.value.replace('_', ' ').title()
+            priority_name = ticket.priority.value.title()
+            
+            subject = f"[{ticket.ticket_code}] Nueva incidencia de {category_name} - {priority_name}"
+            
+            body = f"""Estimado/a {provider.contact_person or provider.name},
+
+Se ha registrado una nueva incidencia que requiere su atención:
+
+📋 **Ticket:** {ticket.ticket_code}
+📂 **Categoría:** {category_name}
+⚠️ **Prioridad:** {priority_name}
+📧 **Reportado por:** {ticket.reporter_name or ticket.reporter_email}
+🏢 **Comunidad:** {ticket.community_name or 'No especificada'}
+
+**Asunto:**
+{ticket.subject}
+
+**Descripción del problema:**
+{ticket.description or 'Sin descripción adicional'}
+"""
+            
+            # Add location info if available
+            if ticket.address or ticket.location_detail:
+                body += "\n**Ubicación:**\n"
+                if ticket.address:
+                    body += f"📍 {ticket.address}\n"
+                if ticket.location_detail:
+                    body += f"📌 {ticket.location_detail}\n"
+            
+            body += f"""
+---
+
+Por favor, contacte con el solicitante para coordinar la visita y resolución del problema.
+
+Puede responder directamente a este correo para comunicarse con el sistema de gestión.
+
+Gracias por su colaboración.
+
+Atentamente,
+Sistema de Gestión de Incidencias
+"""
+            
+            # Send the email
+            await self.send_email(
+                to=provider.email,
+                subject=subject,
+                body_text=body,
+                ticket=ticket,
+            )
+            
+            # Create event for tracking
+            event = Event(
+                ticket_id=ticket.id,
+                event_type="PROVIDER_NOTIFIED",
+                description=f"Proveedor por defecto notificado: {provider.name} ({provider.email})",
+                payload={"provider_id": provider.id, "provider_name": provider.name, "provider_email": provider.email},
+                created_by="AI Agent"
+            )
+            self.db.add(event)
+            
+            # Update ticket status to DISPATCHED since we assigned and notified a provider
+            ticket.status = TicketStatus.DISPATCHED
+            
+            await self.db.commit()
+            
+            logger.info("Successfully notified provider %s for ticket %s, status changed to DISPATCHED",
+                       provider.name, ticket.ticket_code)
+            
+        except Exception as e:
+            logger.error("Failed to notify provider for ticket %s: %s", ticket.ticket_code, str(e), exc_info=True)
+            
+            # Create event noting the failure
+            try:
+                event = Event(
+                    ticket_id=ticket.id,
+                    event_type="PROVIDER_NOTIFICATION_FAILED",
+                    description=f"Error al notificar proveedor: {str(e)[:200]}",
+                    created_by="AI Agent"
+                )
+                self.db.add(event)
+                await self.db.commit()
+            except Exception:
+                pass  # Don't fail if we can't create the event
+    
     async def _process_info_response(
         self,
         ticket: Ticket,
@@ -589,7 +711,8 @@ class EmailService:
                 ticket.status = TicketStatus.NEW
                 logger.info("Ticket %s now has complete info, status changed to NEW", ticket.ticket_code)
                 
-                # TODO: Could auto-assign provider here based on category
+                # Notify the default provider for this category
+                await self._notify_default_provider(ticket)
             else:
                 # Still missing info, send another request
                 # Get the last outbound email for reply reference
