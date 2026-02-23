@@ -41,6 +41,10 @@ NEW_INCIDENT_PHRASES = [
 # Time threshold after which we consider it a new incident (24 hours)
 NEW_INCIDENT_TIME_THRESHOLD = timedelta(hours=24)
 
+# Time window for considering a ticket as "active" (2 hours)
+# Within this window, messages are assumed to be about the same incident unless clearly different
+ACTIVE_TICKET_WINDOW = timedelta(hours=2)
+
 
 class WhatsAppService:
     """Service for handling WhatsApp messages via Twilio."""
@@ -176,11 +180,26 @@ class WhatsAppService:
         
         logger.info("Detected intent: %s, data: %s", intent, intent_data)
         
+        # Find most recent active ticket (within 2 hours, any status except resolved/closed)
+        recent_active_ticket = await self._find_recent_active_ticket(phone)
+        
         # Handle based on intent
         if intent == "GREETING":
             return await self._handle_greeting(phone, profile_name, open_tickets, pending_ticket)
         
         elif intent == "NEW_INCIDENT":
+            # IMPORTANT: Check if there's a recent active ticket before creating a new one
+            # This prevents duplicate tickets when user provides more info
+            if recent_active_ticket:
+                # Use AI to determine if this is truly a NEW incident or info for existing one
+                is_new, reason = await self._detect_if_new_incident(recent_active_ticket, body)
+                logger.info("Recent ticket exists (%s). Is new incident? %s - %s", 
+                           recent_active_ticket.ticket_code, is_new, reason)
+                
+                if not is_new:
+                    # Treat as providing info for existing ticket
+                    return await self._process_info_response(recent_active_ticket, body, phone)
+            
             # User wants to report a new incident
             problem_description = intent_data.get("problem_description", body)
             return await self._create_ticket_from_message(phone, problem_description, profile_name)
@@ -190,22 +209,28 @@ class WhatsAppService:
         
         elif intent == "PROVIDE_INFO":
             # User is providing info for a pending ticket
-            if pending_ticket:
-                return await self._process_info_response(pending_ticket, body, phone)
+            target_ticket = pending_ticket or recent_active_ticket
+            if target_ticket:
+                return await self._process_info_response(target_ticket, body, phone)
             else:
-                # No pending ticket, maybe they want to create one
+                # No active ticket, create one
                 return await self._create_ticket_from_message(phone, body, profile_name)
         
         elif intent == "CONFIRM_DATA":
             # User confirmed their data is correct
-            if pending_ticket:
-                return await self._process_info_response(pending_ticket, body, phone)
+            target_ticket = pending_ticket or recent_active_ticket
+            if target_ticket:
+                return await self._process_info_response(target_ticket, body, phone)
             return self._format_welcome_message(profile_name, open_tickets)
         
         elif intent == "OFF_TOPIC":
             return self._format_off_topic_response()
         
         else:  # UNCLEAR or unknown
+            # If unclear but there's a recent ticket, assume info for that ticket
+            if recent_active_ticket:
+                logger.info("Unclear intent but recent ticket exists, treating as info")
+                return await self._process_info_response(recent_active_ticket, body, phone)
             return self._format_help_message(profile_name, open_tickets, pending_ticket)
     
     async def _detect_user_intent(
@@ -340,6 +365,45 @@ Responde SOLO en JSON: {{"intent": "INTENT_NAME", "problem_description": "si apl
             )
             ticket = result.scalar_one_or_none()
             if ticket:
+                return ticket
+        
+        return None
+    
+    async def _find_recent_active_ticket(self, phone: str) -> Optional[Ticket]:
+        """
+        Find the most recent active ticket for this user within ACTIVE_TICKET_WINDOW.
+        This helps prevent duplicate tickets when user is providing info for an existing one.
+        """
+        # Try multiple phone formats
+        phone_clean = phone.strip().replace(" ", "").replace("-", "")
+        phone_variants = [
+            phone_clean,
+            phone_clean.replace("+", ""),
+            f"+{phone_clean}" if not phone_clean.startswith("+") else phone_clean,
+        ]
+        
+        # Calculate cutoff time
+        cutoff_time = datetime.now(timezone.utc) - ACTIVE_TICKET_WINDOW
+        
+        for variant in phone_variants:
+            result = await self.db.execute(
+                select(Ticket)
+                .where(
+                    Ticket.reporter_phone == variant,
+                    Ticket.status.in_([
+                        TicketStatus.NEW,
+                        TicketStatus.NEEDS_INFO,
+                        TicketStatus.IN_PROGRESS,
+                    ]),
+                    Ticket.created_at >= cutoff_time,
+                )
+                .order_by(Ticket.created_at.desc())
+                .limit(1)
+            )
+            ticket = result.scalar_one_or_none()
+            if ticket:
+                logger.info("Found recent active ticket %s (created %s)", 
+                           ticket.ticket_code, ticket.created_at)
                 return ticket
         
         return None
@@ -926,8 +990,22 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
         self.db.add(event)
         await self.db.commit()
         
-        # If complete, notify provider
-        if analysis.has_complete_info:
+        # Determine if we have enough info to proceed
+        # Essential: phone + problem description + (address OR community)
+        has_essential = (
+            phone and
+            message and len(message.strip()) > 10 and
+            (address or community)
+        )
+        
+        # If AI says complete OR we have essential info, proceed
+        should_proceed = analysis.has_complete_info or has_essential
+        
+        if should_proceed:
+            # Update status to NEW (ready for provider)
+            if ticket.status == TicketStatus.NEEDS_INFO:
+                ticket.status = TicketStatus.NEW
+                await self.db.commit()
             await self._notify_default_provider(ticket)
             return self._format_complete_response(ticket, analysis)
         else:
@@ -1050,7 +1128,22 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
         )
         self.db.add(event)
         
-        if analysis.has_complete_info:
+        # Count number of user interactions
+        user_messages = [m for m in conversation_history if m.get("role") == "user"]
+        num_interactions = len(user_messages)
+        
+        # Determine if we have enough info to proceed
+        # Essential: phone + problem description + (address OR community)
+        has_essential = (
+            ticket.reporter_phone and
+            ticket.description and len(ticket.description.strip()) > 10 and
+            (ticket.address or ticket.community_name)
+        )
+        
+        # If AI says complete, or we have essential info after 2+ interactions, proceed
+        should_proceed = analysis.has_complete_info or (has_essential and num_interactions >= 2)
+        
+        if should_proceed:
             ticket.status = TicketStatus.NEW
             await self.db.commit()
             await self._notify_default_provider(ticket)
@@ -1155,8 +1248,6 @@ Código: *{ticket.ticket_code}*
             response += f"""📝 *Hemos entendido que su problema es:*
 "{analysis.summary}"
 
-_¿Es correcto? Si no es así, por favor descríbalo nuevamente._
-
 """
         
         # Show known data for confirmation
@@ -1191,38 +1282,43 @@ _¿Es correcto? Si no es así, por favor descríbalo nuevamente._
         if known_data.get("community"):
             fields_we_have.add("community_name")
         
+        # If we have a description in the ticket, don't ask for problem_description again
+        if ticket.description and len(ticket.description.strip()) > 15:
+            fields_we_have.add("problem_description")
+        
         # Get missing fields that we don't already have
         truly_missing = [f for f in analysis.missing_fields if f not in fields_we_have]
         
+        # Filter out non-essential fields if we have the basics
+        # Essential: phone (we have via WhatsApp), problem (we have), address OR community
+        essential_fields = {"address", "location_detail"}
+        truly_missing = [f for f in truly_missing if f in essential_fields or f in ("reporter_name",)]
+        
         if truly_missing:
             response += "━━━━━━━━━━━━━━━━━━━━━━\n"
-            response += "⚠️ *NECESITAMOS ESTA INFORMACIÓN:*\n\n"
+            response += "⚠️ *Para poder gestionar su incidencia necesitamos:*\n\n"
             
             # Convert technical field names to friendly Spanish with examples
             field_examples = {
                 "reporter_name": ("Su nombre completo", "Ej: Juan García"),
-                "reporter_phone": ("Teléfono de contacto", "Ej: 612345678"),
-                "reporter_contact": ("Teléfono de contacto", "Ej: 612345678"),
                 "address": ("Dirección del edificio", "Ej: Calle Mayor 15"),
                 "location_detail": ("Piso y puerta", "Ej: 3º A"),
-                "community_name": ("Nombre de la comunidad", "Ej: Comunidad Jardines del Sur"),
-                "problem_description": ("Descripción detallada del problema", ""),
-                "urgency": ("¿Es urgente?", "Ej: Sí/No"),
             }
             
             for i, field in enumerate(truly_missing, 1):
                 field_info = field_examples.get(field, (self.FIELD_NAMES_ES.get(field, field), ""))
                 name, example = field_info
                 if example:
-                    response += f"{i}️⃣ *{name}*\n   _{example}_\n"
+                    response += f"• *{name}* _{example}_\n"
                 else:
-                    response += f"{i}️⃣ *{name}*\n"
+                    response += f"• *{name}*\n"
             
-            response += "\n"
-        
-        response += """📩 *Responda con los datos que faltan* para que podamos gestionar su incidencia lo antes posible.
+            response += "\n📩 Por favor, indíquenos estos datos."
+        else:
+            # No missing essential fields - confirm we're processing
+            response += """✅ Tenemos la información necesaria. Estamos procesando su incidencia.
 
-_Una vez tengamos toda la información, le confirmaremos el registro y le avisaremos cuando esté solucionada._"""
+_Le notificaremos cuando esté resuelto._"""
         
         return response
     
