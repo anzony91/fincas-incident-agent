@@ -167,6 +167,13 @@ class WhatsAppService:
         community = reporter.community_name if reporter else None
         address = reporter.address if reporter else None
         floor_door = reporter.floor_door if reporter else None
+        reporter_email = reporter.email if reporter and reporter.email else None
+        
+        # Generate placeholder email if none available (required by schema)
+        if not reporter_email:
+            # Create email from phone: +34612345678 -> whatsapp_34612345678@whatsapp.local
+            phone_clean = phone.replace("+", "").replace(" ", "").replace("-", "")
+            reporter_email = f"whatsapp_{phone_clean}@whatsapp.local"
         
         # Create ticket
         ticket_service = TicketService(self.db)
@@ -179,12 +186,15 @@ class WhatsAppService:
             description=message,
             category=category,
             priority=priority,
-            reporter_phone=phone,
+            reporter_email=reporter_email,
             reporter_name=reporter_name,
             community_name=community,
-            address=address,
-            location_detail=floor_door,
         ))
+        
+        # Set additional fields not in schema
+        ticket.reporter_phone = phone
+        ticket.address = address
+        ticket.location_detail = floor_door
         
         # Set status and AI context
         initial_status = TicketStatus.NEW if analysis.has_complete_info else TicketStatus.NEEDS_INFO
