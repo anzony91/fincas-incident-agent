@@ -25,11 +25,17 @@ from app.services.classifier_service import ClassifierService
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Commands that indicate user wants to start a new incident
-NEW_INCIDENT_COMMANDS = [
-    "nueva", "nuevo", "nueva incidencia", "nuevo problema", 
-    "otro problema", "otra incidencia", "reportar nueva",
-    "tengo otro problema", "quiero reportar", "nueva consulta",
+# Commands that indicate user wants to start a new incident (exact match or at start)
+NEW_INCIDENT_COMMANDS_EXACT = [
+    "nueva", "nuevo", "reportar", "incidencia",
+]
+
+# Phrases that indicate new incident (can appear anywhere in message)
+NEW_INCIDENT_PHRASES = [
+    "nueva incidencia", "nuevo problema", "otra incidencia", "otro problema",
+    "reportar nueva", "tengo otro problema", "quiero reportar", "nueva consulta",
+    "tengo una nueva", "tengo un nuevo", "hay una nueva", "hay un nuevo",
+    "reportar incidencia", "nueva averia", "nueva avería", "otra averia", "otra avería",
 ]
 
 # Time threshold after which we consider it a new incident (24 hours)
@@ -59,6 +65,20 @@ class WhatsAppService:
             logger.warning("Cannot validate - Twilio not configured")
             return False
         return self.validator.validate(url, params, signature)
+    
+    @staticmethod
+    def _is_valid_floor_door(value: str) -> bool:
+        """Check if a value is a valid floor/door (not a room name)."""
+        if not value:
+            return False
+        value_lower = value.lower()
+        # Room names that should NOT be saved as floor/door
+        invalid_values = [
+            "baño", "bano", "cocina", "salon", "salón", "dormitorio", 
+            "habitacion", "habitación", "terraza", "balcon", "balcón", 
+            "pasillo", "comedor", "aseo", "lavabo", "despensa", "trastero"
+        ]
+        return not any(room in value_lower for room in invalid_values)
     
     async def process_incoming_message(
         self,
@@ -115,12 +135,19 @@ class WhatsAppService:
         return await self._create_ticket_from_message(phone, body, profile_name)
     
     def _is_new_incident_command(self, message: str) -> bool:
-        """Check if the message is an explicit command to start a new incident."""
+        """Check if the message indicates a new incident should be created."""
         message_lower = message.lower().strip()
         
-        # Check exact matches first
-        for cmd in NEW_INCIDENT_COMMANDS:
+        # Check exact matches or starts with (for short commands)
+        for cmd in NEW_INCIDENT_COMMANDS_EXACT:
             if message_lower == cmd or message_lower.startswith(f"{cmd} ") or message_lower.startswith(f"{cmd}:"):
+                logger.info("New incident command detected (exact/start): '%s'", cmd)
+                return True
+        
+        # Check if any new incident phrase appears ANYWHERE in the message
+        for phrase in NEW_INCIDENT_PHRASES:
+            if phrase in message_lower:
+                logger.info("New incident phrase detected: '%s' in message", phrase)
                 return True
         
         return False
@@ -354,6 +381,11 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
         # Find or create reporter
         reporter = await self._find_or_create_reporter(phone, profile_name)
         
+        # Log reporter data for debugging
+        if reporter:
+            logger.info("Reporter found: name=%s, phone=%s, address=%s, floor_door=%s, community=%s",
+                       reporter.name, reporter.phone, reporter.address, reporter.floor_door, reporter.community_name)
+        
         # Use AI to analyze the incident
         analysis = await self.ai_agent.analyze_incident(
             subject="Incidencia vía WhatsApp",
@@ -365,16 +397,27 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
         
         logger.info("AI Analysis - Complete: %s, Category: %s, Missing: %s",
                    analysis.has_complete_info, analysis.category, analysis.missing_fields)
+        logger.info("AI Extracted info: %s", analysis.extracted_info)
         
         # Determine category and priority
         category = analysis.category or Category.OTHER
         priority = analysis.priority or Priority.MEDIUM
         
-        # Pre-fill from reporter if available
+        # Pre-fill from reporter if available - ONLY use clean data, not AI extractions on floor_door
         reporter_name = profile_name or (reporter.name if reporter else f"WhatsApp {phone[-4:]}")
         community = reporter.community_name if reporter else None
         address = reporter.address if reporter else None
-        floor_door = reporter.floor_door if reporter else None
+        # Only use floor_door if it looks like a real floor/door (not a room name like "baño")
+        floor_door = None
+        if reporter and reporter.floor_door:
+            fd_lower = reporter.floor_door.lower()
+            # Filter out room names that got incorrectly saved as floor_door
+            invalid_floor_door = ["baño", "bano", "cocina", "salon", "salón", "dormitorio", "habitacion", "habitación", "terraza", "balcon", "balcón", "pasillo"]
+            if not any(room in fd_lower for room in invalid_floor_door):
+                floor_door = reporter.floor_door
+            else:
+                logger.warning("Skipping invalid floor_door value: %s", reporter.floor_door)
+        
         reporter_email = reporter.email if reporter and reporter.email else None
         
         # Generate placeholder email if none available (required by schema)
@@ -422,15 +465,32 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
             ],
         }
         
-        # Update reporter with extracted info
+        # Update reporter with extracted info (but be careful with floor_door)
         if reporter:
             extracted = analysis.extracted_info
             if extracted.get("address") and not reporter.address:
                 reporter.address = extracted["address"]
+            # Only save location_detail as floor_door if it looks like actual floor/door info
             if extracted.get("location_detail") and not reporter.floor_door:
-                reporter.floor_door = extracted["location_detail"]
+                location = extracted["location_detail"].lower()
+                invalid_locations = ["baño", "bano", "cocina", "salon", "salón", "dormitorio", 
+                                    "habitacion", "habitación", "terraza", "balcon", "balcón", "pasillo"]
+                if not any(room in location for room in invalid_locations):
+                    reporter.floor_door = extracted["location_detail"]
+                    logger.info("Saved floor_door: %s", extracted["location_detail"])
+                else:
+                    logger.warning("Not saving room name as floor_door: %s", extracted["location_detail"])
             if extracted.get("reporter_name") and reporter.name.startswith("WhatsApp"):
                 reporter.name = extracted["reporter_name"]
+            
+            # Clean up existing invalid floor_door value
+            if reporter.floor_door:
+                fd_lower = reporter.floor_door.lower()
+                invalid_floor_door = ["baño", "bano", "cocina", "salon", "salón", "dormitorio", 
+                                     "habitacion", "habitación", "terraza", "balcon", "balcón", "pasillo"]
+                if any(room in fd_lower for room in invalid_floor_door):
+                    logger.info("Clearing invalid floor_door value: %s", reporter.floor_door)
+                    reporter.floor_door = None
         
         await self.db.commit()
         await self.db.refresh(ticket)
@@ -520,8 +580,13 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
         extracted = analysis.extracted_info
         if extracted.get("address") and not ticket.address:
             ticket.address = extracted["address"]
+        # Only save location_detail if it looks like actual floor/door info
         if extracted.get("location_detail") and not ticket.location_detail:
-            ticket.location_detail = extracted["location_detail"]
+            location = extracted["location_detail"].lower()
+            invalid_locations = ["baño", "bano", "cocina", "salon", "salón", "dormitorio", 
+                                "habitacion", "habitación", "terraza", "balcon", "balcón", "pasillo"]
+            if not any(room in location for room in invalid_locations):
+                ticket.location_detail = extracted["location_detail"]
         if extracted.get("reporter_phone") and not ticket.reporter_phone:
             ticket.reporter_phone = extracted["reporter_phone"]
         if extracted.get("reporter_name") and (not ticket.reporter_name or ticket.reporter_name.startswith("WhatsApp")):
@@ -538,10 +603,24 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
         if reporter:
             if extracted.get("address") and not reporter.address:
                 reporter.address = extracted["address"]
+            # Only save location_detail as floor_door if it looks like actual floor/door info
             if extracted.get("location_detail") and not reporter.floor_door:
-                reporter.floor_door = extracted["location_detail"]
+                location = extracted["location_detail"].lower()
+                invalid_locations = ["baño", "bano", "cocina", "salon", "salón", "dormitorio", 
+                                    "habitacion", "habitación", "terraza", "balcon", "balcón", "pasillo"]
+                if not any(room in location for room in invalid_locations):
+                    reporter.floor_door = extracted["location_detail"]
             if extracted.get("reporter_name") and reporter.name.startswith("WhatsApp"):
                 reporter.name = extracted["reporter_name"]
+            
+            # Clean up existing invalid floor_door value
+            if reporter.floor_door:
+                fd_lower = reporter.floor_door.lower()
+                invalid_floor_door = ["baño", "bano", "cocina", "salon", "salón", "dormitorio", 
+                                     "habitacion", "habitación", "terraza", "balcon", "balcón", "pasillo"]
+                if any(room in fd_lower for room in invalid_floor_door):
+                    logger.info("Clearing invalid floor_door value in _process_info_response: %s", reporter.floor_door)
+                    reporter.floor_door = None
         
         # Create event
         event = Event(
@@ -559,13 +638,21 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
             return self._format_complete_response(ticket, analysis)
         else:
             await self.db.commit()
-            # Build known data from ticket
+            # Build known data from ticket (filter out invalid floor_door values)
+            floor_door_value = ticket.location_detail
+            if floor_door_value:
+                fd_lower = floor_door_value.lower()
+                invalid_values = ["baño", "bano", "cocina", "salon", "salón", "dormitorio", 
+                                 "habitacion", "habitación", "terraza", "balcon", "balcón", "pasillo"]
+                if any(room in fd_lower for room in invalid_values):
+                    floor_door_value = None
+            
             known_data = {
                 "name": ticket.reporter_name if ticket.reporter_name and not ticket.reporter_name.startswith("WhatsApp") else None,
                 "phone": ticket.reporter_phone,
                 "community": ticket.community_name,
                 "address": ticket.address,
-                "floor_door": ticket.location_detail,
+                "floor_door": floor_door_value,
             }
             return self._format_followup_response(ticket, analysis, known_data)
     
