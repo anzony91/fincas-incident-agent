@@ -265,16 +265,35 @@ class WhatsAppService:
         conversation_history = ai_context.get("conversation_history", [])
         conversation_history.append({"role": "user", "content": message})
         
+        # Build context with existing ticket data so AI knows what we already have
+        existing_info = []
+        if ticket.reporter_name:
+            existing_info.append(f"Nombre: {ticket.reporter_name}")
+        if ticket.reporter_phone:
+            existing_info.append(f"Teléfono: {ticket.reporter_phone}")
+        if ticket.address:
+            existing_info.append(f"Dirección: {ticket.address}")
+        if ticket.location_detail:
+            existing_info.append(f"Piso/Puerta: {ticket.location_detail}")
+        if ticket.community_name:
+            existing_info.append(f"Comunidad: {ticket.community_name}")
+        
+        # Build full context for AI
+        full_body = ticket.description or ""
+        if existing_info:
+            full_body += f"\n\n[INFORMACIÓN YA RECOPILADA]\n" + "\n".join(existing_info)
+        full_body += f"\n\n[NUEVA RESPUESTA DEL USUARIO]\n{message}"
+        
         # Re-analyze with new info
         analysis = await self.ai_agent.analyze_incident(
             subject=ticket.subject,
-            body=ticket.description,
+            body=full_body,
             sender_email=ticket.reporter_email,
             sender_name=ticket.reporter_name,
             conversation_history=conversation_history,
         )
         
-        # Update ticket
+        # Update ticket with conversation history
         ai_context["conversation_history"] = conversation_history
         ai_context["analysis"] = {
             "has_complete_info": analysis.has_complete_info,
@@ -286,16 +305,32 @@ class WhatsAppService:
         }
         ticket.ai_context = ai_context
         
-        # Update extracted info
+        # Update extracted info from the new response
         extracted = analysis.extracted_info
-        if extracted.get("address"):
+        if extracted.get("address") and not ticket.address:
             ticket.address = extracted["address"]
-        if extracted.get("location_detail"):
+        if extracted.get("location_detail") and not ticket.location_detail:
             ticket.location_detail = extracted["location_detail"]
-        if extracted.get("reporter_phone"):
+        if extracted.get("reporter_phone") and not ticket.reporter_phone:
             ticket.reporter_phone = extracted["reporter_phone"]
-        if extracted.get("reporter_name") and not ticket.reporter_name:
+        if extracted.get("reporter_name") and (not ticket.reporter_name or ticket.reporter_name.startswith("WhatsApp")):
             ticket.reporter_name = extracted["reporter_name"]
+        
+        # Also update reporter record if available
+        reporter = None
+        phone_clean = phone.strip()
+        result = await self.db.execute(
+            select(Reporter).where(Reporter.phone == phone_clean)
+        )
+        reporter = result.scalar_one_or_none()
+        
+        if reporter:
+            if extracted.get("address") and not reporter.address:
+                reporter.address = extracted["address"]
+            if extracted.get("location_detail") and not reporter.floor_door:
+                reporter.floor_door = extracted["location_detail"]
+            if extracted.get("reporter_name") and reporter.name.startswith("WhatsApp"):
+                reporter.name = extracted["reporter_name"]
         
         # Create event
         event = Event(
@@ -324,6 +359,19 @@ class WhatsAppService:
         except Exception as e:
             logger.error("Failed to notify provider: %s", str(e))
     
+    # Mapping from technical field names to user-friendly Spanish
+    FIELD_NAMES_ES = {
+        "reporter_name": "Su nombre",
+        "reporter_phone": "Teléfono de contacto",
+        "reporter_contact": "Teléfono de contacto",
+        "address": "Dirección del edificio",
+        "location_detail": "Piso y puerta",
+        "community_name": "Nombre de la comunidad",
+        "problem_description": "Descripción del problema",
+        "urgency": "Nivel de urgencia",
+        "category": "Tipo de incidencia",
+    }
+    
     def _format_complete_response(self, ticket: Ticket, analysis) -> str:
         """Format response when ticket has complete info."""
         return (
@@ -337,17 +385,30 @@ class WhatsAppService:
     
     def _format_followup_response(self, ticket: Ticket, analysis) -> str:
         """Format response asking for more info."""
-        missing = "\n".join([f"• {field}" for field in analysis.missing_fields])
-        questions = "\n".join(analysis.follow_up_questions) if analysis.follow_up_questions else ""
+        # Convert technical field names to friendly Spanish
+        friendly_fields = []
+        for field in analysis.missing_fields:
+            friendly_name = self.FIELD_NAMES_ES.get(field, field)
+            friendly_fields.append(f"• {friendly_name}")
         
-        return (
-            f"📋 *Incidencia recibida*\n"
-            f"Código: *{ticket.ticket_code}*\n\n"
-            f"Para poder gestionar su incidencia, necesitamos:\n"
-            f"{missing}\n\n"
-            f"{questions}\n\n"
-            f"Por favor, responda a este mensaje con la información."
-        )
+        missing = "\n".join(friendly_fields) if friendly_fields else ""
+        
+        # Use follow-up questions from AI (they should be in Spanish)
+        questions = ""
+        if analysis.follow_up_questions:
+            questions = "\n".join(analysis.follow_up_questions)
+        
+        response = f"📋 *Incidencia recibida*\nCódigo: *{ticket.ticket_code}*\n\n"
+        
+        if missing:
+            response += f"Para poder gestionar su incidencia, necesitamos:\n{missing}\n\n"
+        
+        if questions:
+            response += f"{questions}\n\n"
+        
+        response += "Por favor, responda a este mensaje con la información solicitada."
+        
+        return response
     
     async def send_message(self, to_phone: str, message: str) -> bool:
         """Send a WhatsApp message."""
