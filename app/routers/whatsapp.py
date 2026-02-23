@@ -77,13 +77,11 @@ async def whatsapp_webhook(
                           media_type="application/xml")
             
     except Exception as e:
-        import traceback
-        error_detail = traceback.format_exc()
-        logger.error("Error processing WhatsApp message: %s\n%s", str(e), error_detail)
-        # Return error info for debugging (remove in production)
-        error_twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+        logger.error("Error processing WhatsApp message: %s", str(e), exc_info=True)
+        # Return user-friendly error
+        error_twiml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Message>Error: {str(e)[:200]}</Message>
+    <Message>Lo sentimos, ha ocurrido un error procesando su mensaje. Por favor, inténtelo de nuevo más tarde o contacte con fincas.madrid.incidencias@gmail.com</Message>
 </Response>"""
         return Response(content=error_twiml, media_type="application/xml")
 
