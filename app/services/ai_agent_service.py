@@ -213,33 +213,74 @@ Si falta información, genera las preguntas que debemos hacer al reportante.
         analysis: IncidentAnalysis,
         ticket_code: str,
         reporter_name: Optional[str] = None,
+        known_data: Optional[dict] = None,
     ) -> Tuple[str, str]:
         """
         Generate a follow-up email asking for missing information.
+        Shows known data for confirmation if provided.
         
         Returns:
             Tuple of (subject, body_text)
         """
+        known_data = known_data or {}
+        
         if not self.client:
-            return self._fallback_follow_up_email(analysis, ticket_code, reporter_name)
+            return self._fallback_follow_up_email(analysis, ticket_code, reporter_name, known_data)
         
         try:
-            questions_text = "\n".join(f"- {q}" for q in analysis.follow_up_questions)
+            # Build known data text for inclusion
+            known_items = []
+            if known_data.get("name"):
+                known_items.append(f"- Nombre: {known_data['name']}")
+            if known_data.get("phone"):
+                known_items.append(f"- Teléfono: {known_data['phone']}")
+            if known_data.get("email"):
+                known_items.append(f"- Email: {known_data['email']}")
+            if known_data.get("community"):
+                known_items.append(f"- Comunidad: {known_data['community']}")
+            if known_data.get("address"):
+                known_items.append(f"- Dirección: {known_data['address']}")
+            if known_data.get("floor_door"):
+                known_items.append(f"- Piso/Puerta: {known_data['floor_door']}")
+            
+            known_data_text = ""
+            if known_items:
+                known_data_text = f"\n\nDATOS QUE YA TENEMOS REGISTRADOS (confirmar si son correctos):\n" + "\n".join(known_items)
+            
+            # Filter questions for info we already have
+            filtered_questions = []
+            for q in analysis.follow_up_questions:
+                q_lower = q.lower()
+                skip = False
+                if known_data.get("phone") and ("teléfono" in q_lower or "telefono" in q_lower or "contactar" in q_lower):
+                    skip = True
+                if known_data.get("name") and "nombre" in q_lower:
+                    skip = True
+                if known_data.get("address") and "dirección" in q_lower:
+                    skip = True
+                if known_data.get("community") and "comunidad" in q_lower:
+                    skip = True
+                if not skip:
+                    filtered_questions.append(q)
+            
+            questions_text = "\n".join(f"- {q}" for q in filtered_questions) if filtered_questions else "(Por favor confirme los datos mostrados)"
             
             prompt = f"""Genera un email amable y profesional para solicitar más información sobre una incidencia.
 
 CÓDIGO DE TICKET: {ticket_code}
 NOMBRE DEL REPORTANTE: {reporter_name or 'Estimado/a vecino/a'}
 RESUMEN DEL PROBLEMA: {analysis.summary}
+{known_data_text}
 
-INFORMACIÓN QUE NECESITAMOS:
+INFORMACIÓN ADICIONAL QUE NECESITAMOS:
 {questions_text}
 
 El email debe:
 - Ser breve y claro
 - Agradecer el reporte inicial
-- Explicar que necesitamos más información para gestionar la incidencia
-- Hacer las preguntas de forma numerada
+- Si hay datos registrados, mostrarlos y pedir que confirmen si son correctos
+- Explicar que necesitamos completar la información para gestionar la incidencia
+- Hacer las preguntas adicionales de forma numerada (solo las que faltan)
 - Pedir que respondan a este mismo email
 - Firmar como "Administración de Fincas"
 
@@ -310,13 +351,47 @@ Responde en JSON con: {{"subject": "asunto", "body": "cuerpo del email"}}"""
         analysis: IncidentAnalysis,
         ticket_code: str,
         reporter_name: Optional[str],
+        known_data: Optional[dict] = None,
     ) -> Tuple[str, str]:
         """Generate a basic follow-up email without OpenAI"""
+        known_data = known_data or {}
         name = reporter_name or "Estimado/a vecino/a"
-        questions = "\n".join(f"{i+1}. {q}" for i, q in enumerate(analysis.follow_up_questions))
+        
+        # Build known data section
+        known_section = ""
+        known_items = []
+        if known_data.get("name"):
+            known_items.append(f"- Nombre: {known_data['name']}")
+        if known_data.get("phone"):
+            known_items.append(f"- Teléfono: {known_data['phone']}")
+        if known_data.get("community"):
+            known_items.append(f"- Comunidad: {known_data['community']}")
+        if known_data.get("address"):
+            known_items.append(f"- Dirección: {known_data['address']}")
+        if known_data.get("floor_door"):
+            known_items.append(f"- Piso/Puerta: {known_data['floor_door']}")
+        
+        if known_items:
+            known_section = "\n\nSus datos registrados:\n" + "\n".join(known_items) + "\n\nPor favor, confírmenos si estos datos son correctos."
+        
+        # Filter questions we already have answers for
+        filtered_questions = []
+        for q in analysis.follow_up_questions:
+            q_lower = q.lower()
+            skip = False
+            if known_data.get("phone") and ("teléfono" in q_lower or "telefono" in q_lower):
+                skip = True
+            if known_data.get("name") and "nombre" in q_lower:
+                skip = True
+            if known_data.get("address") and "dirección" in q_lower:
+                skip = True
+            if not skip:
+                filtered_questions.append(q)
+        
+        questions = "\n".join(f"{i+1}. {q}" for i, q in enumerate(filtered_questions)) if filtered_questions else ""
         
         subject = f"Re: Necesitamos más información - {ticket_code}"
-        body = f"""Hola {name},
+        body = f"""Hola {name},{known_section}
 
 Gracias por reportar la incidencia. Para poder gestionarla correctamente, necesitamos que nos proporcione la siguiente información:
 

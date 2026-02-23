@@ -448,7 +448,18 @@ class EmailService:
             
             if analysis.follow_up_questions or analysis.missing_fields:
                 logger.info("Ticket %s needs more info, sending request email", ticket.ticket_code)
-                await self._send_info_request(ticket, analysis, email_record.message_id)
+                # Build known_data from reporter for inclusion in follow-up email
+                known_data = None
+                if reporter:
+                    known_data = {
+                        "name": reporter.name if reporter.name and not reporter.name.startswith(reporter.email.split('@')[0]) else None,
+                        "phone": reporter.phone,
+                        "email": reporter.email if not reporter.email.endswith('.placeholder.com') else None,
+                        "community": reporter.community_name,
+                        "address": reporter.address,
+                        "floor_door": reporter.floor_door,
+                    }
+                await self._send_info_request(ticket, analysis, email_record.message_id, known_data)
             else:
                 logger.warning("Ticket %s marked incomplete but no questions/fields to ask", ticket.ticket_code)
         
@@ -484,7 +495,9 @@ class EmailService:
         reporter = result.scalar_one_or_none()
         
         if reporter:
-            logger.info("Found existing reporter: %s (%s)", reporter.name, reporter.email)
+            # Refresh to ensure we have latest data from database
+            await self.db.refresh(reporter)
+            logger.info("Found existing reporter: %s (%s) (refreshed)", reporter.name, reporter.email)
             return reporter
         
         # Create new reporter with minimal info
@@ -593,18 +606,21 @@ class EmailService:
         ticket: Ticket,
         analysis: IncidentAnalysis,
         reply_to_message_id: str,
+        known_data: Optional[dict] = None,
     ) -> None:
-        """Send email requesting missing information"""
+        """Send email requesting missing information, showing known data for confirmation"""
         logger.info("Preparing info request email for ticket %s", ticket.ticket_code)
         logger.info("Missing fields: %s", analysis.missing_fields)
         logger.info("Follow-up questions: %s", analysis.follow_up_questions)
+        logger.info("Known data: %s", known_data)
         
         try:
-            # Generate follow-up email content
+            # Generate follow-up email content with known data
             subject, body = await self.ai_agent.generate_follow_up_email(
                 analysis=analysis,
                 ticket_code=ticket.ticket_code,
                 reporter_name=ticket.reporter_name,
+                known_data=known_data,
             )
             
             logger.info("Generated email - Subject: %s", subject)
@@ -866,7 +882,25 @@ Sistema de Gestión de Incidencias
                 last_outbound = result.scalar_one_or_none()
                 reply_to = last_outbound.message_id if last_outbound else None
                 
-                await self._send_info_request(ticket, updated_analysis, reply_to)
+                # Get reporter for known data
+                known_data = None
+                if ticket.reporter_email:
+                    reporter_result = await self.db.execute(
+                        select(Reporter).where(Reporter.email == ticket.reporter_email.lower())
+                    )
+                    reporter = reporter_result.scalar_one_or_none()
+                    if reporter:
+                        await self.db.refresh(reporter)
+                        known_data = {
+                            "name": reporter.name if reporter.name and not reporter.name.startswith(reporter.email.split('@')[0]) else None,
+                            "phone": reporter.phone,
+                            "email": reporter.email if not reporter.email.endswith('.placeholder.com') else None,
+                            "community": reporter.community_name,
+                            "address": reporter.address,
+                            "floor_door": reporter.floor_door,
+                        }
+                
+                await self._send_info_request(ticket, updated_analysis, reply_to, known_data)
             
             await self.db.commit()
             

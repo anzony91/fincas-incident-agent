@@ -98,28 +98,42 @@ class WhatsAppService:
         name: Optional[str] = None,
     ) -> Optional[Reporter]:
         """Find or create a reporter by phone number."""
-        # Normalize phone
-        phone_clean = phone.strip()
+        # Normalize phone - remove spaces, dashes, and ensure consistent format
+        phone_clean = phone.strip().replace(" ", "").replace("-", "")
+        
+        # Also try variations without + or with different prefix
+        phone_variants = [
+            phone_clean,
+            phone_clean.replace("+", ""),
+            f"+{phone_clean}" if not phone_clean.startswith("+") else phone_clean,
+        ]
         
         # Check if this phone belongs to a provider
-        provider_check = await self.db.execute(
-            select(Provider).where(
-                (Provider.phone == phone_clean) | 
-                (Provider.phone_emergency == phone_clean)
+        for variant in phone_variants:
+            provider_check = await self.db.execute(
+                select(Provider).where(
+                    (Provider.phone == variant) | 
+                    (Provider.phone_emergency == variant)
+                )
             )
-        )
-        if provider_check.scalar_one_or_none():
-            logger.info("Phone %s belongs to a provider, skipping reporter creation", phone_clean)
-            return None
+            if provider_check.scalar_one_or_none():
+                logger.info("Phone %s belongs to a provider, skipping reporter creation", phone_clean)
+                return None
         
-        # Try to find existing reporter by phone
-        result = await self.db.execute(
-            select(Reporter).where(Reporter.phone == phone_clean)
-        )
-        reporter = result.scalar_one_or_none()
+        # Try to find existing reporter by phone (try all variants)
+        reporter = None
+        for variant in phone_variants:
+            result = await self.db.execute(
+                select(Reporter).where(Reporter.phone == variant)
+            )
+            reporter = result.scalar_one_or_none()
+            if reporter:
+                break
         
         if reporter:
-            logger.info("Found existing reporter by phone: %s", reporter.name)
+            # Refresh to get latest data from database
+            await self.db.refresh(reporter)
+            logger.info("Found existing reporter by phone: %s (refreshed)", reporter.name)
             return reporter
         
         # Generate placeholder email from phone
