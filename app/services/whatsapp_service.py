@@ -122,9 +122,14 @@ class WhatsAppService:
             logger.info("Found existing reporter by phone: %s", reporter.name)
             return reporter
         
+        # Generate placeholder email from phone
+        phone_for_email = phone_clean.replace("+", "").replace(" ", "").replace("-", "")
+        placeholder_email = f"whatsapp_{phone_for_email}@whatsapp.local"
+        
         # Create new reporter
         reporter = Reporter(
             name=name or f"WhatsApp {phone_clean[-4:]}",
+            email=placeholder_email,
             phone=phone_clean,
             is_active=True,
             preferred_contact_method="whatsapp",
