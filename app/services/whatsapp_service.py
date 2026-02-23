@@ -124,7 +124,7 @@ class WhatsAppService:
         
         # Generate placeholder email from phone
         phone_for_email = phone_clean.replace("+", "").replace(" ", "").replace("-", "")
-        placeholder_email = f"whatsapp_{phone_for_email}@whatsapp.local"
+        placeholder_email = f"whatsapp_{phone_for_email}@wa.placeholder.com"
         
         # Create new reporter
         reporter = Reporter(
@@ -176,9 +176,9 @@ class WhatsAppService:
         
         # Generate placeholder email if none available (required by schema)
         if not reporter_email:
-            # Create email from phone: +34612345678 -> whatsapp_34612345678@whatsapp.local
+            # Create email from phone: +34612345678 -> whatsapp_34612345678@wa.placeholder.com
             phone_clean = phone.replace("+", "").replace(" ", "").replace("-", "")
-            reporter_email = f"whatsapp_{phone_clean}@whatsapp.local"
+            reporter_email = f"whatsapp_{phone_clean}@wa.placeholder.com"
         
         # Create ticket
         ticket_service = TicketService(self.db)
