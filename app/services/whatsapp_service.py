@@ -714,10 +714,7 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
 ━━━━━━━━━━━━━━━━━━━━━━
 ✔️ Hemos notificado al técnico especializado.
 
-📞 *Le contactaremos para:*
-1️⃣ Confirmar fecha y hora de la visita
-2️⃣ Informarle cuando el técnico vaya en camino
-3️⃣ Confirmar cuando la reparación esté completada
+� *Le informaremos cuando la incidencia esté solucionada.*
 
 💾 *Guarde el código {ticket.ticket_code}* para consultar el estado de su incidencia.
 
@@ -804,9 +801,9 @@ _¿Es correcto? Si no es así, por favor descríbalo nuevamente._
             
             response += "\n"
         
-        response += """📩 *Responda con los datos que faltan* para que podamos enviar un técnico lo antes posible.
+        response += """📩 *Responda con los datos que faltan* para que podamos gestionar su incidencia lo antes posible.
 
-_Una vez tengamos toda la información, le confirmaremos el registro y le mantendremos informado del estado de la reparación._"""
+_Una vez tengamos toda la información, le confirmaremos el registro y le avisaremos cuando esté solucionada._"""
         
         return response
     
