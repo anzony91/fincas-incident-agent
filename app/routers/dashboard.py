@@ -289,32 +289,18 @@ async def update_ticket_status(
     db: AsyncSession = Depends(get_db)
 ):
     """Update ticket status."""
-    result = await db.execute(
-        select(Ticket).where(Ticket.id == ticket_id)
-    )
-    ticket = result.scalar_one_or_none()
+    from app.services.ticket_service import TicketService
     
-    if ticket:
-        old_status = ticket.status
-        try:
-            new_status = TicketStatus(status)
-            ticket.status = new_status
-            ticket.updated_at = datetime.utcnow()
-            
-            if new_status == TicketStatus.CLOSED and not ticket.closed_at:
-                ticket.closed_at = datetime.utcnow()
-            
-            # Create event
-            event = Event(
-                ticket_id=ticket_id,
-                event_type="STATUS_CHANGED",
-                description=f"Estado cambiado de {old_status.value} a {new_status.value}",
-                created_by="Dashboard"
-            )
-            db.add(event)
-            await db.commit()
-        except ValueError:
-            pass
+    try:
+        new_status = TicketStatus(status)
+        ticket_service = TicketService(db)
+        await ticket_service.change_status(
+            ticket_id=ticket_id,
+            new_status=new_status,
+            comment=f"Estado cambiado desde Dashboard"
+        )
+    except ValueError:
+        pass
     
     return RedirectResponse(url=f"/dashboard/tickets/{ticket_id}", status_code=303)
 

@@ -1,6 +1,7 @@
 """
 Ticket Service - Business logic for ticket management
 """
+import logging
 import random
 import string
 from datetime import datetime, timezone
@@ -11,8 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.event import Event
 from app.models.provider import Provider
-from app.models.ticket import Ticket, TicketStatus
+from app.models.ticket import Ticket, TicketStatus, Channel
 from app.schemas import TicketCreate, TicketUpdate
+
+logger = logging.getLogger(__name__)
 
 
 class TicketService:
@@ -167,7 +170,84 @@ class TicketService:
             {"from": old_status.value, "to": new_status.value},
         )
         
+        # Notify reporter when ticket is closed
+        if new_status == TicketStatus.CLOSED:
+            await self._notify_reporter_on_closure(ticket)
+        
         return ticket
+    
+    async def _notify_reporter_on_closure(self, ticket: Ticket) -> None:
+        """
+        Notify the reporter that their ticket has been resolved.
+        Uses the same channel they used to report the incident.
+        """
+        try:
+            channel = ticket.channel or Channel.EMAIL
+            
+            if channel == Channel.WHATSAPP and ticket.reporter_phone:
+                await self._send_whatsapp_closure_notification(ticket)
+            elif channel == Channel.EMAIL and ticket.reporter_email:
+                await self._send_email_closure_notification(ticket)
+            else:
+                # Fallback to email if available
+                if ticket.reporter_email and not ticket.reporter_email.endswith("@wa.placeholder.com"):
+                    await self._send_email_closure_notification(ticket)
+                elif ticket.reporter_phone:
+                    await self._send_whatsapp_closure_notification(ticket)
+                    
+            logger.info("Closure notification sent for ticket %s via %s", 
+                       ticket.ticket_code, channel.value)
+        except Exception as e:
+            logger.error("Failed to send closure notification for ticket %s: %s", 
+                        ticket.ticket_code, str(e))
+    
+    async def _send_whatsapp_closure_notification(self, ticket: Ticket) -> None:
+        """Send WhatsApp notification when ticket is closed."""
+        from app.services.whatsapp_service import WhatsAppService
+        
+        whatsapp = WhatsAppService(self.db)
+        
+        message = f"""✅ *INCIDENCIA RESUELTA*
+
+📋 *Código:* {ticket.ticket_code}
+📝 *Asunto:* {ticket.subject}
+
+¡Su incidencia ha sido solucionada!
+
+Si tiene alguna duda o el problema persiste, responda a este mensaje.
+
+Gracias por su paciencia. 🙏"""
+        
+        await whatsapp.send_message(ticket.reporter_phone, message)
+    
+    async def _send_email_closure_notification(self, ticket: Ticket) -> None:
+        """Send email notification when ticket is closed."""
+        from app.services.email_service import EmailService
+        
+        email_service = EmailService(self.db)
+        
+        subject = f"✅ Incidencia resuelta: {ticket.ticket_code}"
+        body = f"""Estimado/a {ticket.reporter_name or 'vecino/a'},
+
+Nos complace informarle que su incidencia ha sido resuelta.
+
+📋 Código: {ticket.ticket_code}
+📝 Asunto: {ticket.subject}
+
+Si tiene alguna duda o el problema persiste, puede responder a este correo.
+
+Gracias por su paciencia.
+
+Atentamente,
+Administración de Fincas
+"""
+        
+        await email_service.send_email(
+            to=ticket.reporter_email,
+            subject=subject,
+            body_text=body,
+            ticket=ticket,
+        )
     
     async def get_default_provider_for_category(self, category) -> Optional[Provider]:
         """Get the default provider for a category"""
