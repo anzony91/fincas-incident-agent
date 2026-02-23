@@ -4,7 +4,7 @@ WhatsApp Service - Twilio integration for WhatsApp messaging
 import json
 import logging
 import re
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 
 from twilio.rest import Client
@@ -88,7 +88,7 @@ class WhatsAppService:
         profile_name: Optional[str] = None,
     ) -> Optional[str]:
         """
-        Process an incoming WhatsApp message.
+        Process an incoming WhatsApp message using AI to understand intent.
         Returns the response message to send back.
         """
         logger.info("Processing WhatsApp message from %s: %s", from_number, body[:100])
@@ -96,43 +96,392 @@ class WhatsAppService:
         # Normalize phone number (remove 'whatsapp:' prefix if present)
         phone = from_number.replace("whatsapp:", "").strip()
         
-        # Check for explicit new incident commands
-        if self._is_new_incident_command(body):
-            logger.info("Detected new incident command, creating new ticket")
-            return await self._create_ticket_from_message(phone, body, profile_name)
+        # Find existing ticket that needs info (priority handling)
+        pending_ticket = await self._find_ticket_needing_info(phone)
         
-        # Check if this is a reply to an existing ticket
-        ticket = await self._find_ticket_by_phone(phone)
+        # Get all open tickets for this user
+        open_tickets = await self._find_all_open_tickets(phone)
         
-        if ticket:
-            # Check if it's been too long since last interaction (auto-new incident)
-            time_since_update = datetime.now(timezone.utc) - (ticket.updated_at or ticket.created_at)
-            if time_since_update > NEW_INCIDENT_TIME_THRESHOLD:
-                logger.info("Ticket %s last updated %s ago, treating as new incident", 
-                           ticket.ticket_code, time_since_update)
-                return await self._create_ticket_from_message(phone, body, profile_name)
-            
-            # If ticket needs info, check if this is a response or a new incident
-            if ticket.status == TicketStatus.NEEDS_INFO:
-                is_new, reason = await self._detect_if_new_incident(ticket, body)
-                if is_new:
-                    logger.info("AI detected new incident (reason: %s), creating new ticket", reason)
-                    return await self._create_ticket_from_message(phone, body, profile_name)
-                else:
-                    logger.info("Processing as response to existing ticket %s", ticket.ticket_code)
-                    return await self._process_info_response(ticket, body, phone)
-            
-            # For other open tickets, also check if this is a new incident
-            is_new, reason = await self._detect_if_new_incident(ticket, body)
-            if is_new:
-                logger.info("AI detected new incident for open ticket (reason: %s)", reason)
-                return await self._create_ticket_from_message(phone, body, profile_name)
+        # Use AI to understand the user's intent
+        intent, intent_data = await self._detect_user_intent(body, pending_ticket, open_tickets)
+        
+        logger.info("Detected intent: %s, data: %s", intent, intent_data)
+        
+        # Handle based on intent
+        if intent == "GREETING":
+            return await self._handle_greeting(phone, profile_name, open_tickets, pending_ticket)
+        
+        elif intent == "NEW_INCIDENT":
+            # User wants to report a new incident
+            problem_description = intent_data.get("problem_description", body)
+            return await self._create_ticket_from_message(phone, problem_description, profile_name)
+        
+        elif intent == "CHECK_STATUS":
+            return await self._handle_status_check(phone, open_tickets, intent_data)
+        
+        elif intent == "PROVIDE_INFO":
+            # User is providing info for a pending ticket
+            if pending_ticket:
+                return await self._process_info_response(pending_ticket, body, phone)
             else:
-                # Add as a note/update to the existing ticket
-                return await self._add_update_to_ticket(ticket, body, phone)
+                # No pending ticket, maybe they want to create one
+                return await self._create_ticket_from_message(phone, body, profile_name)
         
-        # No existing ticket - create new one
-        return await self._create_ticket_from_message(phone, body, profile_name)
+        elif intent == "CONFIRM_DATA":
+            # User confirmed their data is correct
+            if pending_ticket:
+                return await self._process_info_response(pending_ticket, body, phone)
+            return self._format_welcome_message(profile_name, open_tickets)
+        
+        elif intent == "OFF_TOPIC":
+            return self._format_off_topic_response()
+        
+        else:  # UNCLEAR or unknown
+            return self._format_help_message(profile_name, open_tickets, pending_ticket)
+    
+    async def _detect_user_intent(
+        self, 
+        message: str, 
+        pending_ticket: Optional[Ticket],
+        open_tickets: List[Ticket]
+    ) -> Tuple[str, dict]:
+        """
+        Use AI to detect user's intent from their message.
+        Returns (intent, additional_data).
+        
+        Intents:
+        - GREETING: Simple greeting (hola, buenos días, etc.)
+        - NEW_INCIDENT: User is reporting a problem
+        - CHECK_STATUS: User wants to know status of their incidents
+        - PROVIDE_INFO: User is providing requested information
+        - CONFIRM_DATA: User is confirming their data is correct
+        - OFF_TOPIC: Question unrelated to incident management
+        - UNCLEAR: Can't determine intent
+        """
+        try:
+            # Build context about user's situation
+            context_parts = []
+            if pending_ticket:
+                context_parts.append(f"- Tiene una incidencia pendiente ({pending_ticket.ticket_code}) esperando información")
+            if open_tickets:
+                tickets_summary = ", ".join([f"{t.ticket_code} ({t.status.value})" for t in open_tickets[:5]])
+                context_parts.append(f"- Tiene {len(open_tickets)} incidencia(s) abierta(s): {tickets_summary}")
+            
+            context = "\n".join(context_parts) if context_parts else "- No tiene incidencias abiertas"
+            
+            prompt = f"""Analiza el siguiente mensaje de WhatsApp de un vecino/propietario y determina su intención.
+
+CONTEXTO DEL USUARIO:
+{context}
+
+MENSAJE DEL USUARIO:
+"{message}"
+
+POSIBLES INTENCIONES:
+1. GREETING - Saludo simple (hola, buenos días, buenas tardes, etc.) sin más contenido
+2. NEW_INCIDENT - Está reportando un problema o avería (agua, luz, ascensor, limpieza, ruidos, etc.)
+3. CHECK_STATUS - Quiere saber el estado de sus incidencias abiertas
+4. PROVIDE_INFO - Está proporcionando información solicitada (nombre, dirección, datos, etc.)
+5. CONFIRM_DATA - Está confirmando que sus datos son correctos (sí, correcto, ok, vale, etc.)
+6. OFF_TOPIC - Pregunta sobre algo NO relacionado con incidencias del edificio (clima, política, recetas, chistes, etc.)
+7. UNCLEAR - No se puede determinar la intención
+
+Si la intención es NEW_INCIDENT, extrae la descripción del problema.
+Si es CHECK_STATUS y menciona un código específico, extráelo.
+
+Responde SOLO en JSON: {{"intent": "INTENT_NAME", "problem_description": "si aplica", "ticket_code": "si menciona uno"}}"""
+
+            if self.ai_agent.client:
+                response = await self.ai_agent.client.chat.completions.create(
+                    model=self.ai_agent.model,
+                    messages=[
+                        {"role": "system", "content": "Eres un asistente que clasifica intenciones de mensajes. Solo gestionamos incidencias de edificios (fontanería, electricidad, ascensores, limpieza, seguridad). Responde solo en JSON."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.2,
+                )
+                
+                result = json.loads(response.choices[0].message.content)
+                intent = result.get("intent", "UNCLEAR")
+                return intent, result
+            
+            # Fallback to simple detection
+            return self._simple_intent_detection(message, pending_ticket)
+            
+        except Exception as e:
+            logger.error("Error detecting intent: %s", str(e))
+            return self._simple_intent_detection(message, pending_ticket)
+    
+    def _simple_intent_detection(self, message: str, pending_ticket: Optional[Ticket]) -> Tuple[str, dict]:
+        """Simple keyword-based intent detection as fallback."""
+        msg_lower = message.lower().strip()
+        
+        # Greetings
+        greetings = ["hola", "buenos días", "buenos dias", "buenas tardes", "buenas noches", "hey", "hi", "buenas"]
+        if msg_lower in greetings or any(msg_lower.startswith(g + " ") for g in greetings[:3]) and len(msg_lower) < 20:
+            return "GREETING", {}
+        
+        # New incident keywords (anywhere in message)
+        for phrase in NEW_INCIDENT_PHRASES:
+            if phrase in msg_lower:
+                return "NEW_INCIDENT", {"problem_description": message}
+        
+        # Status check
+        status_keywords = ["estado", "cómo va", "como va", "qué pasó", "que paso", "novedades", "actualización", "actualizacion", "mis incidencias"]
+        if any(kw in msg_lower for kw in status_keywords):
+            return "CHECK_STATUS", {}
+        
+        # Confirmation
+        confirmations = ["sí", "si", "correcto", "ok", "vale", "de acuerdo", "está bien", "esta bien", "afirmativo", "confirmo"]
+        if msg_lower in confirmations or any(msg_lower.startswith(c) for c in confirmations):
+            return "CONFIRM_DATA", {}
+        
+        # If there's a pending ticket and message has useful info, assume PROVIDE_INFO
+        if pending_ticket:
+            return "PROVIDE_INFO", {}
+        
+        # Check for problem indicators (might be new incident)
+        problem_keywords = ["no funciona", "avería", "averia", "roto", "rota", "fuga", "gotea", "ruido", 
+                          "luz", "agua", "ascensor", "puerta", "cerradura", "suciedad", "basura"]
+        if any(kw in msg_lower for kw in problem_keywords):
+            return "NEW_INCIDENT", {"problem_description": message}
+        
+        return "UNCLEAR", {}
+    
+    async def _find_ticket_needing_info(self, phone: str) -> Optional[Ticket]:
+        """Find a ticket that is waiting for information from this user."""
+        # Try multiple phone formats
+        phone_clean = phone.strip().replace(" ", "").replace("-", "")
+        phone_variants = [
+            phone_clean,
+            phone_clean.replace("+", ""),
+            f"+{phone_clean}" if not phone_clean.startswith("+") else phone_clean,
+        ]
+        
+        for variant in phone_variants:
+            result = await self.db.execute(
+                select(Ticket)
+                .where(
+                    Ticket.reporter_phone == variant,
+                    Ticket.status == TicketStatus.NEEDS_INFO,
+                )
+                .order_by(Ticket.created_at.desc())
+                .limit(1)
+            )
+            ticket = result.scalar_one_or_none()
+            if ticket:
+                return ticket
+        
+        return None
+    
+    async def _find_all_open_tickets(self, phone: str) -> List[Ticket]:
+        """Find all open tickets for this phone number."""
+        phone_clean = phone.strip().replace(" ", "").replace("-", "")
+        phone_variants = [
+            phone_clean,
+            phone_clean.replace("+", ""),
+            f"+{phone_clean}" if not phone_clean.startswith("+") else phone_clean,
+        ]
+        
+        tickets = []
+        for variant in phone_variants:
+            result = await self.db.execute(
+                select(Ticket)
+                .where(
+                    Ticket.reporter_phone == variant,
+                    Ticket.status.in_([
+                        TicketStatus.NEW,
+                        TicketStatus.NEEDS_INFO,
+                        TicketStatus.IN_PROGRESS,
+                        TicketStatus.DISPATCHED,
+                    ])
+                )
+                .order_by(Ticket.created_at.desc())
+            )
+            found = result.scalars().all()
+            for t in found:
+                if t not in tickets:
+                    tickets.append(t)
+        
+        return tickets
+    
+    async def _handle_greeting(
+        self, 
+        phone: str, 
+        profile_name: Optional[str],
+        open_tickets: List[Ticket],
+        pending_ticket: Optional[Ticket]
+    ) -> str:
+        """Handle a greeting message."""
+        return self._format_welcome_message(profile_name, open_tickets, pending_ticket)
+    
+    def _format_welcome_message(
+        self, 
+        profile_name: Optional[str], 
+        open_tickets: List[Ticket] = None,
+        pending_ticket: Optional[Ticket] = None
+    ) -> str:
+        """Format a welcome message with available options."""
+        name = profile_name or "vecino/a"
+        
+        response = f"""👋 *¡Hola {name}!*
+
+Soy el asistente de *Administración de Fincas*. Puedo ayudarte con:
+
+"""
+        
+        # If there's a pending ticket, mention it first
+        if pending_ticket:
+            response += f"""⚠️ *Tienes una incidencia pendiente de información:*
+📋 {pending_ticket.ticket_code}: {pending_ticket.subject[:50]}...
+_Responde con los datos que te pedimos para procesarla._
+
+"""
+        
+        response += """📝 *Reportar una incidencia*
+   Cuéntame el problema (ej: "no funciona la luz del portal")
+
+"""
+        
+        if open_tickets and len(open_tickets) > 0:
+            response += f"""📊 *Consultar estado* de tus {len(open_tickets)} incidencia(s) abierta(s)
+   Escribe "estado" o "mis incidencias"
+
+"""
+        
+        response += """❓ *Ayuda*
+   Escribe "ayuda" para ver más opciones
+
+¿En qué puedo ayudarte?"""
+        
+        return response
+    
+    async def _handle_status_check(
+        self, 
+        phone: str, 
+        open_tickets: List[Ticket],
+        intent_data: dict
+    ) -> str:
+        """Handle a request to check ticket status."""
+        specific_code = intent_data.get("ticket_code")
+        
+        if specific_code:
+            # Look for specific ticket
+            for ticket in open_tickets:
+                if ticket.ticket_code.lower() == specific_code.lower():
+                    return self._format_ticket_status(ticket)
+            return f"No encontré ninguna incidencia con código *{specific_code}* asociada a tu número."
+        
+        if not open_tickets:
+            return """📭 *No tienes incidencias abiertas*
+
+Si quieres reportar un problema, simplemente cuéntame qué ocurre."""
+        
+        response = f"""📊 *Tus incidencias abiertas ({len(open_tickets)}):*
+
+"""
+        
+        status_emoji = {
+            TicketStatus.NEW: "🆕",
+            TicketStatus.NEEDS_INFO: "⏳",
+            TicketStatus.IN_PROGRESS: "🔧",
+            TicketStatus.DISPATCHED: "🚗",
+        }
+        
+        status_text = {
+            TicketStatus.NEW: "Pendiente",
+            TicketStatus.NEEDS_INFO: "Esperando información",
+            TicketStatus.IN_PROGRESS: "En proceso",
+            TicketStatus.DISPATCHED: "Técnico asignado",
+        }
+        
+        for i, ticket in enumerate(open_tickets[:5], 1):
+            emoji = status_emoji.get(ticket.status, "📋")
+            status = status_text.get(ticket.status, ticket.status.value)
+            subject_short = ticket.subject[:40] + "..." if len(ticket.subject) > 40 else ticket.subject
+            response += f"""{i}. {emoji} *{ticket.ticket_code}*
+   {subject_short}
+   Estado: _{status}_
+
+"""
+        
+        if len(open_tickets) > 5:
+            response += f"_...y {len(open_tickets) - 5} más_\n\n"
+        
+        response += "Para más detalles de una incidencia, escribe su código (ej: INC-XXXXX)"
+        
+        return response
+    
+    def _format_ticket_status(self, ticket: Ticket) -> str:
+        """Format detailed status for a single ticket."""
+        status_text = {
+            TicketStatus.NEW: "📋 Pendiente de asignación",
+            TicketStatus.NEEDS_INFO: "⏳ Esperando información adicional",
+            TicketStatus.IN_PROGRESS: "🔧 En proceso de reparación",
+            TicketStatus.DISPATCHED: "🚗 Técnico asignado",
+            TicketStatus.RESOLVED: "✅ Resuelta",
+            TicketStatus.CLOSED: "🔒 Cerrada",
+        }
+        
+        response = f"""📋 *Incidencia {ticket.ticket_code}*
+
+📝 *Problema:* {ticket.subject}
+
+📊 *Estado:* {status_text.get(ticket.status, ticket.status.value)}
+"""
+        
+        if ticket.address:
+            response += f"📍 *Ubicación:* {ticket.address}"
+            if ticket.location_detail:
+                response += f" ({ticket.location_detail})"
+            response += "\n"
+        
+        if ticket.created_at:
+            created_str = ticket.created_at.strftime("%d/%m/%Y %H:%M")
+            response += f"📅 *Reportada:* {created_str}\n"
+        
+        if ticket.status == TicketStatus.NEEDS_INFO:
+            response += "\n⚠️ _Necesitamos más información para procesar esta incidencia. Por favor revisa los datos que te solicitamos._"
+        
+        return response
+    
+    def _format_off_topic_response(self) -> str:
+        """Response for off-topic questions."""
+        return """🤖 Lo siento, solo puedo ayudarte con temas relacionados con *incidencias del edificio*.
+
+Puedo ayudarte a:
+• 📝 Reportar averías o problemas (luz, agua, ascensor, limpieza, etc.)
+• 📊 Consultar el estado de tus incidencias
+
+¿Tienes algún problema en el edificio que quieras reportar?"""
+    
+    def _format_help_message(
+        self, 
+        profile_name: Optional[str], 
+        open_tickets: List[Ticket],
+        pending_ticket: Optional[Ticket]
+    ) -> str:
+        """Format help message when intent is unclear."""
+        response = """🤔 No estoy seguro de entenderte. 
+
+*¿Qué quieres hacer?*
+
+1️⃣ *Reportar un problema* → Describe qué ocurre
+   _Ej: "La luz del portal no funciona"_
+
+2️⃣ *Ver mis incidencias* → Escribe "estado"
+"""
+        
+        if pending_ticket:
+            response += f"""
+⚠️ *Tienes información pendiente de proporcionar* para la incidencia {pending_ticket.ticket_code}.
+"""
+        
+        response += """
+Solo puedo ayudarte con incidencias del edificio (fontanería, electricidad, ascensores, limpieza, seguridad, etc.)"""
+        
+        return response
     
     def _is_new_incident_command(self, message: str) -> bool:
         """Check if the message indicates a new incident should be created."""
