@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models.ticket import Ticket, TicketStatus, Category, Priority
+from app.models.ticket import Ticket, TicketStatus, Category, Priority, Channel
 from app.models.provider import Provider
 from app.models.reporter import Reporter
 from app.models.event import Event
@@ -79,6 +79,75 @@ class WhatsAppService:
             "pasillo", "comedor", "aseo", "lavabo", "despensa", "trastero"
         ]
         return not any(room in value_lower for room in invalid_values)
+    
+    @staticmethod
+    def _generate_clean_subject(message: str, ai_summary: Optional[str] = None) -> str:
+        """
+        Generate a clean, concise subject (5-10 words) for the ticket.
+        Removes unnecessary phrases and uses AI summary if available.
+        """
+        # Phrases to remove from the beginning
+        remove_phrases = [
+            "tengo una nueva incidencia",
+            "tengo un nuevo problema",
+            "tengo una nueva",
+            "tengo un nuevo",
+            "quiero reportar",
+            "nueva incidencia",
+            "nuevo problema",
+            "reportar incidencia",
+            "buenas tardes",
+            "buenos días",
+            "buenos dias",
+            "buenas noches",
+            "hola",
+            "oye",
+            "mira",
+            "por favor",
+            "necesito ayuda",
+        ]
+        
+        # Use AI summary if available and not empty
+        if ai_summary and len(ai_summary.strip()) > 5:
+            subject = ai_summary.strip()
+        else:
+            # Clean up the message
+            subject = message.strip()
+        
+        # Remove common prefixes (case insensitive)
+        subject_lower = subject.lower()
+        for phrase in remove_phrases:
+            if subject_lower.startswith(phrase):
+                subject = subject[len(phrase):].strip()
+                subject_lower = subject.lower()
+                # Remove leading punctuation and connectors
+                while subject and subject[0] in ".,;:!¡¿?-–—":
+                    subject = subject[1:].strip()
+                    subject_lower = subject.lower()
+                # Remove connector words at the start
+                for connector in ["que ", "de que ", "porque ", "ya que ", "es que "]:
+                    if subject_lower.startswith(connector):
+                        subject = subject[len(connector):].strip()
+                        subject_lower = subject.lower()
+        
+        # Capitalize first letter
+        if subject:
+            subject = subject[0].upper() + subject[1:] if len(subject) > 1 else subject.upper()
+        
+        # Truncate to reasonable length (max 80 chars, try to end at word boundary)
+        if len(subject) > 80:
+            # Find last space before 80 chars
+            last_space = subject[:77].rfind(' ')
+            if last_space > 40:
+                subject = subject[:last_space] + "..."
+            else:
+                subject = subject[:77] + "..."
+        
+        # Ensure we have something
+        if not subject or len(subject) < 3:
+            subject = "Incidencia reportada vía WhatsApp"
+        
+        return subject
     
     async def process_incoming_message(
         self,
@@ -778,11 +847,11 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
         # Create ticket
         ticket_service = TicketService(self.db)
         
-        # Generate a subject from the message
-        subject = message[:50] + "..." if len(message) > 50 else message
+        # Generate a clean subject from AI summary or extract from message
+        subject = self._generate_clean_subject(message, analysis.summary)
         
         ticket = await ticket_service.create_ticket(TicketCreate(
-            subject=f"[WhatsApp] {subject}",
+            subject=subject,
             description=message,
             category=category,
             priority=priority,
@@ -795,6 +864,7 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
         ticket.reporter_phone = phone
         ticket.address = address
         ticket.location_detail = floor_door
+        ticket.channel = Channel.WHATSAPP  # Mark as WhatsApp channel
         
         # Set status and AI context
         initial_status = TicketStatus.NEW if analysis.has_complete_info else TicketStatus.NEEDS_INFO
