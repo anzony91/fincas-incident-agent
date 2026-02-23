@@ -1,9 +1,11 @@
 """
 WhatsApp Service - Twilio integration for WhatsApp messaging
 """
+import json
 import logging
-from typing import Optional
-from datetime import datetime, timezone
+import re
+from typing import Optional, Tuple
+from datetime import datetime, timezone, timedelta
 
 from twilio.rest import Client
 from twilio.request_validator import RequestValidator
@@ -22,6 +24,16 @@ from app.services.classifier_service import ClassifierService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Commands that indicate user wants to start a new incident
+NEW_INCIDENT_COMMANDS = [
+    "nueva", "nuevo", "nueva incidencia", "nuevo problema", 
+    "otro problema", "otra incidencia", "reportar nueva",
+    "tengo otro problema", "quiero reportar", "nueva consulta",
+]
+
+# Time threshold after which we consider it a new incident (24 hours)
+NEW_INCIDENT_TIME_THRESHOLD = timedelta(hours=24)
 
 
 class WhatsAppService:
@@ -64,15 +76,192 @@ class WhatsAppService:
         # Normalize phone number (remove 'whatsapp:' prefix if present)
         phone = from_number.replace("whatsapp:", "").strip()
         
+        # Check for explicit new incident commands
+        if self._is_new_incident_command(body):
+            logger.info("Detected new incident command, creating new ticket")
+            return await self._create_ticket_from_message(phone, body, profile_name)
+        
         # Check if this is a reply to an existing ticket
         ticket = await self._find_ticket_by_phone(phone)
         
-        if ticket and ticket.status == TicketStatus.NEEDS_INFO:
-            # This is a response to a follow-up question
-            return await self._process_info_response(ticket, body, phone)
+        if ticket:
+            # Check if it's been too long since last interaction (auto-new incident)
+            time_since_update = datetime.now(timezone.utc) - (ticket.updated_at or ticket.created_at)
+            if time_since_update > NEW_INCIDENT_TIME_THRESHOLD:
+                logger.info("Ticket %s last updated %s ago, treating as new incident", 
+                           ticket.ticket_code, time_since_update)
+                return await self._create_ticket_from_message(phone, body, profile_name)
+            
+            # If ticket needs info, check if this is a response or a new incident
+            if ticket.status == TicketStatus.NEEDS_INFO:
+                is_new, reason = await self._detect_if_new_incident(ticket, body)
+                if is_new:
+                    logger.info("AI detected new incident (reason: %s), creating new ticket", reason)
+                    return await self._create_ticket_from_message(phone, body, profile_name)
+                else:
+                    logger.info("Processing as response to existing ticket %s", ticket.ticket_code)
+                    return await self._process_info_response(ticket, body, phone)
+            
+            # For other open tickets, also check if this is a new incident
+            is_new, reason = await self._detect_if_new_incident(ticket, body)
+            if is_new:
+                logger.info("AI detected new incident for open ticket (reason: %s)", reason)
+                return await self._create_ticket_from_message(phone, body, profile_name)
+            else:
+                # Add as a note/update to the existing ticket
+                return await self._add_update_to_ticket(ticket, body, phone)
         
-        # New incident - create ticket
+        # No existing ticket - create new one
         return await self._create_ticket_from_message(phone, body, profile_name)
+    
+    def _is_new_incident_command(self, message: str) -> bool:
+        """Check if the message is an explicit command to start a new incident."""
+        message_lower = message.lower().strip()
+        
+        # Check exact matches first
+        for cmd in NEW_INCIDENT_COMMANDS:
+            if message_lower == cmd or message_lower.startswith(f"{cmd} ") or message_lower.startswith(f"{cmd}:"):
+                return True
+        
+        return False
+    
+    async def _detect_if_new_incident(self, existing_ticket: Ticket, new_message: str) -> Tuple[bool, str]:
+        """
+        Use AI to determine if the message is about a NEW incident or the same one.
+        Returns (is_new_incident, reason).
+        """
+        try:
+            # Build context about the existing ticket
+            existing_context = f"""
+INCIDENCIA EXISTENTE ({existing_ticket.ticket_code}):
+- Categoría: {existing_ticket.category.value if existing_ticket.category else 'No definida'}
+- Asunto: {existing_ticket.subject}
+- Descripción: {existing_ticket.description[:500] if existing_ticket.description else 'Sin descripción'}
+- Dirección: {existing_ticket.address or 'No especificada'}
+- Estado: {existing_ticket.status.value}
+"""
+            
+            # Get AI analysis
+            prompt = f"""Analiza si este nuevo mensaje de WhatsApp es sobre la MISMA incidencia existente o es una NUEVA incidencia diferente.
+
+{existing_context}
+
+NUEVO MENSAJE DEL USUARIO:
+"{new_message}"
+
+Criterios para considerarlo NUEVA incidencia:
+1. Habla de un problema DIFERENTE (ej: antes era fontanería, ahora electricidad)
+2. Menciona una ubicación DIFERENTE (otro piso, otro edificio)
+3. Describe algo claramente NO relacionado con lo anterior
+4. Usa frases como "tengo otro problema", "además", "otra cosa"
+
+Criterios para considerarlo la MISMA incidencia:
+1. Proporciona información que se pidió (nombre, dirección, detalles)
+2. Da más detalles sobre el MISMO problema
+3. Pregunta sobre el estado de su incidencia
+4. Responde a preguntas previas
+
+Responde ÚNICAMENTE en formato JSON: {{"is_new": true/false, "reason": "explicación breve"}}"""
+
+            if self.ai_agent.client:
+                response = await self.ai_agent.client.chat.completions.create(
+                    model=self.ai_agent.model,
+                    messages=[
+                        {"role": "system", "content": "Eres un asistente que analiza conversaciones de WhatsApp para determinar si un mensaje es sobre una nueva incidencia o la misma. Responde solo en JSON."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.3,
+                )
+                
+                result = json.loads(response.choices[0].message.content)
+                is_new = result.get("is_new", False)
+                reason = result.get("reason", "Sin razón especificada")
+                
+                logger.info("AI incident detection: is_new=%s, reason=%s", is_new, reason)
+                return is_new, reason
+            
+            # Fallback: simple keyword detection
+            return self._simple_new_incident_detection(existing_ticket, new_message)
+            
+        except Exception as e:
+            logger.error("Error in AI incident detection: %s", str(e))
+            return self._simple_new_incident_detection(existing_ticket, new_message)
+    
+    def _simple_new_incident_detection(self, existing_ticket: Ticket, new_message: str) -> Tuple[bool, str]:
+        """Simple keyword-based detection as fallback."""
+        message_lower = new_message.lower()
+        
+        # Keywords that suggest a new incident
+        new_incident_keywords = [
+            "otro problema", "otra incidencia", "además tengo", "también tengo",
+            "nueva avería", "otra avería", "otro tema", "aparte de eso",
+            "tengo otro", "hay otro", "también hay", "otro asunto",
+        ]
+        
+        for keyword in new_incident_keywords:
+            if keyword in message_lower:
+                return True, f"Contiene '{keyword}'"
+        
+        # Check if message mentions a completely different category
+        existing_category = existing_ticket.category.value if existing_ticket.category else ""
+        category_keywords = {
+            "plumbing": ["agua", "tubería", "fontanería", "grifo", "lavabo", "wc", "atasco", "fuga"],
+            "electrical": ["luz", "electricidad", "enchufe", "interruptor", "corriente", "fusible"],
+            "elevator": ["ascensor", "elevador"],
+            "structural": ["grieta", "pared", "techo", "suelo", "estructura"],
+            "cleaning": ["limpieza", "basura", "suciedad"],
+            "security": ["seguridad", "puerta", "cerradura", "portal"],
+        }
+        
+        # Find what category the new message might be about
+        new_categories = set()
+        for cat, keywords in category_keywords.items():
+            for kw in keywords:
+                if kw in message_lower:
+                    new_categories.add(cat)
+        
+        # If new message is about a different category, it's likely a new incident
+        if new_categories and existing_category not in new_categories:
+            return True, f"Categoría diferente detectada: {new_categories}"
+        
+        return False, "Parece ser sobre la misma incidencia"
+    
+    async def _add_update_to_ticket(self, ticket: Ticket, message: str, phone: str) -> str:
+        """Add a message as an update to an existing ticket."""
+        # Create event
+        event = Event(
+            ticket_id=ticket.id,
+            event_type="whatsapp_update",
+            description=f"Mensaje adicional recibido vía WhatsApp: {message[:200]}",
+            metadata={"phone": phone, "message": message},
+        )
+        self.db.add(event)
+        await self.db.commit()
+        
+        response = f"""📝 *Mensaje recibido*
+
+He añadido tu mensaje a la incidencia existente *{ticket.ticket_code}*.
+
+Estado actual: *{self._get_status_text(ticket.status)}*
+
+Si quieres reportar una *nueva incidencia diferente*, escribe: "nueva incidencia"
+
+Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
+        
+        return response
+    
+    def _get_status_text(self, status: TicketStatus) -> str:
+        """Get user-friendly status text."""
+        status_texts = {
+            TicketStatus.NEW: "Nueva - Pendiente de asignación",
+            TicketStatus.NEEDS_INFO: "Esperando información",
+            TicketStatus.IN_PROGRESS: "En proceso",
+            TicketStatus.DISPATCHED: "Asignada a proveedor",
+            TicketStatus.RESOLVED: "Resuelta",
+            TicketStatus.CLOSED: "Cerrada",
+        }
+        return status_texts.get(status, status.value)
     
     async def _find_ticket_by_phone(self, phone: str) -> Optional[Ticket]:
         """Find the most recent open ticket for this phone number."""
