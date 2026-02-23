@@ -680,20 +680,68 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
     
     def _format_complete_response(self, ticket: Ticket, analysis) -> str:
         """Format response when ticket has complete info."""
-        return (
-            f"✅ *Incidencia registrada*\n\n"
-            f"📋 Código: *{ticket.ticket_code}*\n"
-            f"📝 {analysis.summary}\n\n"
-            f"Hemos notificado al técnico correspondiente. "
-            f"Se pondrán en contacto con usted para coordinar la visita.\n\n"
-            f"Guarde este código para seguimiento."
-        )
+        # Get category in Spanish
+        category_names = {
+            "plumbing": "Fontanería",
+            "electrical": "Electricidad",
+            "elevator": "Ascensor",
+            "structural": "Estructura/Albañilería",
+            "cleaning": "Limpieza",
+            "security": "Seguridad",
+            "hvac": "Climatización",
+            "other": "General",
+        }
+        category_es = category_names.get(ticket.category.value, ticket.category.value) if ticket.category else "General"
+        
+        response = f"""✅ *INCIDENCIA REGISTRADA CORRECTAMENTE*
+
+📋 *Código de seguimiento:* {ticket.ticket_code}
+
+📝 *Resumen del problema:*
+{analysis.summary}
+
+🏷️ *Categoría:* {category_es}
+"""
+        
+        # Add location info if available
+        if ticket.address:
+            response += f"📍 *Ubicación:* {ticket.address}"
+            if ticket.location_detail:
+                response += f" ({ticket.location_detail})"
+            response += "\n"
+        
+        response += f"""
+━━━━━━━━━━━━━━━━━━━━━━
+✔️ Hemos notificado al técnico especializado.
+
+📞 *Le contactaremos para:*
+1️⃣ Confirmar fecha y hora de la visita
+2️⃣ Informarle cuando el técnico vaya en camino
+3️⃣ Confirmar cuando la reparación esté completada
+
+💾 *Guarde el código {ticket.ticket_code}* para consultar el estado de su incidencia.
+
+Si tiene alguna duda, responda a este mensaje."""
+        
+        return response
     
     def _format_followup_response(self, ticket: Ticket, analysis, known_data: dict = None) -> str:
         """Format response asking for more info, showing known data first."""
         known_data = known_data or {}
         
-        response = f"📋 *Incidencia recibida*\nCódigo: *{ticket.ticket_code}*\n\n"
+        response = f"""📋 *INCIDENCIA RECIBIDA*
+Código: *{ticket.ticket_code}*
+
+"""
+        
+        # Show summary of what we understood about the problem
+        if analysis.summary:
+            response += f"""📝 *Hemos entendido que su problema es:*
+"{analysis.summary}"
+
+_¿Es correcto? Si no es así, por favor descríbalo nuevamente._
+
+"""
         
         # Show known data for confirmation
         known_items = []
@@ -709,7 +757,7 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
             known_items.append(f"🚪 Piso/Puerta: {known_data['floor_door']}")
         
         if known_items:
-            response += "*Sus datos registrados:*\n"
+            response += "*✅ Sus datos registrados:*\n"
             response += "\n".join(known_items)
             response += "\n\n"
         
@@ -731,37 +779,34 @@ Si tienes dudas sobre esta incidencia, simplemente responde aquí."""
         truly_missing = [f for f in analysis.missing_fields if f not in fields_we_have]
         
         if truly_missing:
-            # Convert technical field names to friendly Spanish
-            friendly_fields = []
-            for field in truly_missing:
-                friendly_name = self.FIELD_NAMES_ES.get(field, field)
-                friendly_fields.append(f"• {friendly_name}")
+            response += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            response += "⚠️ *NECESITAMOS ESTA INFORMACIÓN:*\n\n"
             
-            response += "*Para completar su incidencia necesitamos:*\n"
-            response += "\n".join(friendly_fields)
-            response += "\n\n"
-        
-        # Use follow-up questions from AI (they should be in Spanish)
-        if analysis.follow_up_questions:
-            # Filter questions that ask for info we already have
-            filtered_questions = []
-            for q in analysis.follow_up_questions:
-                q_lower = q.lower()
-                skip = False
-                if known_data.get("phone") and ("teléfono" in q_lower or "telefono" in q_lower or "contactar" in q_lower):
-                    skip = True
-                if known_data.get("name") and "nombre" in q_lower:
-                    skip = True
-                if known_data.get("address") and "dirección" in q_lower:
-                    skip = True
-                if not skip:
-                    filtered_questions.append(q)
+            # Convert technical field names to friendly Spanish with examples
+            field_examples = {
+                "reporter_name": ("Su nombre completo", "Ej: Juan García"),
+                "reporter_phone": ("Teléfono de contacto", "Ej: 612345678"),
+                "reporter_contact": ("Teléfono de contacto", "Ej: 612345678"),
+                "address": ("Dirección del edificio", "Ej: Calle Mayor 15"),
+                "location_detail": ("Piso y puerta", "Ej: 3º A"),
+                "community_name": ("Nombre de la comunidad", "Ej: Comunidad Jardines del Sur"),
+                "problem_description": ("Descripción detallada del problema", ""),
+                "urgency": ("¿Es urgente?", "Ej: Sí/No"),
+            }
             
-            if filtered_questions:
-                response += "\n".join(filtered_questions)
-                response += "\n\n"
+            for i, field in enumerate(truly_missing, 1):
+                field_info = field_examples.get(field, (self.FIELD_NAMES_ES.get(field, field), ""))
+                name, example = field_info
+                if example:
+                    response += f"{i}️⃣ *{name}*\n   _{example}_\n"
+                else:
+                    response += f"{i}️⃣ *{name}*\n"
+            
+            response += "\n"
         
-        response += "Por favor, responda con la información solicitada."
+        response += """📩 *Responda con los datos que faltan* para que podamos enviar un técnico lo antes posible.
+
+_Una vez tengamos toda la información, le confirmaremos el registro y le mantendremos informado del estado de la reparación._"""
         
         return response
     
