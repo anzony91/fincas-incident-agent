@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.database import close_db, init_db
-from app.routers import emails, events, providers, tickets, dashboard, reporters, public
+from app.routers import emails, events, providers, tickets, dashboard, reporters, public, whatsapp
 
 settings = get_settings()
 
@@ -71,6 +71,7 @@ app.include_router(emails.router, prefix="/api/emails", tags=["Emails"])
 app.include_router(events.router, prefix="/api/events", tags=["Events"])
 app.include_router(dashboard.router)
 app.include_router(public.router)  # Public routes for incident form
+app.include_router(whatsapp.router, prefix="/api/whatsapp", tags=["WhatsApp"])
 
 
 @app.get("/", tags=["Health"])

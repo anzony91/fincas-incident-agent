@@ -1,6 +1,6 @@
 """
 API Routers package
 """
-from app.routers import emails, events, providers, tickets, dashboard, reporters, public
+from app.routers import emails, events, providers, tickets, dashboard, reporters, public, whatsapp
 
-__all__ = ["tickets", "providers", "emails", "events", "dashboard", "reporters", "public"]
+__all__ = ["tickets", "providers", "emails", "events", "dashboard", "reporters", "public", "whatsapp"]

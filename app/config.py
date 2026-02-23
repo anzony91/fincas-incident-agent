@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     
+    # Twilio Configuration (for WhatsApp)
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_whatsapp_number: str = "+14155238886"  # Sandbox number by default
+    
     # Application
     app_name: str = "Fincas Incident Agent"
     debug: bool = False
