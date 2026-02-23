@@ -249,7 +249,15 @@ class WhatsAppService:
             await self._notify_default_provider(ticket)
             return self._format_complete_response(ticket, analysis)
         else:
-            return self._format_followup_response(ticket, analysis)
+            # Pass reporter info to format response with known data
+            known_data = {
+                "name": reporter_name if not reporter_name.startswith("WhatsApp") else None,
+                "phone": phone,
+                "community": community,
+                "address": address,
+                "floor_door": floor_door,
+            }
+            return self._format_followup_response(ticket, analysis, known_data)
     
     async def _process_info_response(
         self,
@@ -348,7 +356,15 @@ class WhatsAppService:
             return self._format_complete_response(ticket, analysis)
         else:
             await self.db.commit()
-            return self._format_followup_response(ticket, analysis)
+            # Build known data from ticket
+            known_data = {
+                "name": ticket.reporter_name if ticket.reporter_name and not ticket.reporter_name.startswith("WhatsApp") else None,
+                "phone": ticket.reporter_phone,
+                "community": ticket.community_name,
+                "address": ticket.address,
+                "floor_door": ticket.location_detail,
+            }
+            return self._format_followup_response(ticket, analysis, known_data)
     
     async def _notify_default_provider(self, ticket: Ticket) -> None:
         """Notify the default provider for this ticket category."""
@@ -383,30 +399,79 @@ class WhatsAppService:
             f"Guarde este código para seguimiento."
         )
     
-    def _format_followup_response(self, ticket: Ticket, analysis) -> str:
-        """Format response asking for more info."""
-        # Convert technical field names to friendly Spanish
-        friendly_fields = []
-        for field in analysis.missing_fields:
-            friendly_name = self.FIELD_NAMES_ES.get(field, field)
-            friendly_fields.append(f"• {friendly_name}")
-        
-        missing = "\n".join(friendly_fields) if friendly_fields else ""
-        
-        # Use follow-up questions from AI (they should be in Spanish)
-        questions = ""
-        if analysis.follow_up_questions:
-            questions = "\n".join(analysis.follow_up_questions)
+    def _format_followup_response(self, ticket: Ticket, analysis, known_data: dict = None) -> str:
+        """Format response asking for more info, showing known data first."""
+        known_data = known_data or {}
         
         response = f"📋 *Incidencia recibida*\nCódigo: *{ticket.ticket_code}*\n\n"
         
-        if missing:
-            response += f"Para poder gestionar su incidencia, necesitamos:\n{missing}\n\n"
+        # Show known data for confirmation
+        known_items = []
+        if known_data.get("name"):
+            known_items.append(f"👤 Nombre: {known_data['name']}")
+        if known_data.get("phone"):
+            known_items.append(f"📱 Teléfono: {known_data['phone']}")
+        if known_data.get("community"):
+            known_items.append(f"🏢 Comunidad: {known_data['community']}")
+        if known_data.get("address"):
+            known_items.append(f"📍 Dirección: {known_data['address']}")
+        if known_data.get("floor_door"):
+            known_items.append(f"🚪 Piso/Puerta: {known_data['floor_door']}")
         
-        if questions:
-            response += f"{questions}\n\n"
+        if known_items:
+            response += "*Sus datos registrados:*\n"
+            response += "\n".join(known_items)
+            response += "\n\n"
         
-        response += "Por favor, responda a este mensaje con la información solicitada."
+        # Filter out fields we already have
+        fields_we_have = set()
+        if known_data.get("phone"):
+            fields_we_have.add("reporter_phone")
+            fields_we_have.add("reporter_contact")
+        if known_data.get("name"):
+            fields_we_have.add("reporter_name")
+        if known_data.get("address"):
+            fields_we_have.add("address")
+        if known_data.get("floor_door"):
+            fields_we_have.add("location_detail")
+        if known_data.get("community"):
+            fields_we_have.add("community_name")
+        
+        # Get missing fields that we don't already have
+        truly_missing = [f for f in analysis.missing_fields if f not in fields_we_have]
+        
+        if truly_missing:
+            # Convert technical field names to friendly Spanish
+            friendly_fields = []
+            for field in truly_missing:
+                friendly_name = self.FIELD_NAMES_ES.get(field, field)
+                friendly_fields.append(f"• {friendly_name}")
+            
+            response += "*Para completar su incidencia necesitamos:*\n"
+            response += "\n".join(friendly_fields)
+            response += "\n\n"
+        
+        # Use follow-up questions from AI (they should be in Spanish)
+        if analysis.follow_up_questions:
+            # Filter questions that ask for info we already have
+            filtered_questions = []
+            for q in analysis.follow_up_questions:
+                q_lower = q.lower()
+                skip = False
+                if known_data.get("phone") and ("teléfono" in q_lower or "telefono" in q_lower or "contactar" in q_lower):
+                    skip = True
+                if known_data.get("name") and "nombre" in q_lower:
+                    skip = True
+                if known_data.get("address") and "dirección" in q_lower:
+                    skip = True
+                if not skip:
+                    filtered_questions.append(q)
+            
+            if filtered_questions:
+                response += "\n".join(filtered_questions)
+                response += "\n\n"
+        
+        response += "Por favor, responda con la información solicitada."
         
         return response
     
