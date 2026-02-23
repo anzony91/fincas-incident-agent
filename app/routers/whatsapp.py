@@ -77,11 +77,13 @@ async def whatsapp_webhook(
                           media_type="application/xml")
             
     except Exception as e:
-        logger.error("Error processing WhatsApp message: %s", str(e), exc_info=True)
-        # Still return 200 to Twilio to avoid retries, but log the error
-        error_twiml = """<?xml version="1.0" encoding="UTF-8"?>
+        import traceback
+        error_detail = traceback.format_exc()
+        logger.error("Error processing WhatsApp message: %s\n%s", str(e), error_detail)
+        # Return error info for debugging (remove in production)
+        error_twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Message>Lo sentimos, ha ocurrido un error procesando su mensaje. Por favor, inténtelo de nuevo más tarde.</Message>
+    <Message>Error: {str(e)[:200]}</Message>
 </Response>"""
         return Response(content=error_twiml, media_type="application/xml")
 
