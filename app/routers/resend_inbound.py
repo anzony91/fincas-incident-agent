@@ -134,8 +134,16 @@ async def resend_inbound_webhook(
         headers = data.get("headers", [])
         email_id = data.get("id", "")
         
-        # Get Message-ID from headers
-        message_id = get_header_value(headers, "Message-ID") or f"<{email_id}@resend.dev>"
+        # Get Message-ID from headers - generate unique one if missing/invalid
+        import uuid
+        header_message_id = get_header_value(headers, "Message-ID")
+        if header_message_id and len(header_message_id) > 10 and "@" in header_message_id:
+            message_id = header_message_id
+        elif email_id:
+            message_id = f"<{email_id}@resend.dev>"
+        else:
+            # Generate unique message_id if Resend doesn't provide one
+            message_id = f"<{uuid.uuid4()}@resend-inbound.adminsavia.com>"
         in_reply_to = get_header_value(headers, "In-Reply-To")
         references = get_header_value(headers, "References")
         
@@ -277,6 +285,7 @@ async def _process_incident_email(
     # Check if this is a reply to an existing ticket
     existing_ticket = None
     
+    # Method 1: Check In-Reply-To header
     if in_reply_to:
         result = await db.execute(
             select(Email).where(Email.message_id == in_reply_to)
@@ -287,8 +296,10 @@ async def _process_incident_email(
                 select(Ticket).where(Ticket.id == original_email.ticket_id)
             )
             existing_ticket = result.scalar_one_or_none()
+            if existing_ticket:
+                logger.info("Found existing ticket via In-Reply-To: %s", existing_ticket.ticket_code)
     
-    # Also check for ticket code in subject
+    # Method 2: Check for ticket code in subject
     if not existing_ticket:
         import re
         match = re.search(r'INC-[A-Z0-9]{6}', subject)
@@ -298,6 +309,49 @@ async def _process_incident_email(
                 select(Ticket).where(Ticket.ticket_code == ticket_code)
             )
             existing_ticket = result.scalar_one_or_none()
+            if existing_ticket:
+                logger.info("Found existing ticket via subject code: %s", existing_ticket.ticket_code)
+    
+    # Method 3: Find recent ticket from same sender with similar subject (like WhatsApp)
+    # This handles email threads where headers might be missing
+    if not existing_ticket:
+        from datetime import timedelta
+        from sqlalchemy import and_, or_
+        
+        # Look for tickets from same reporter in last 48 hours
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=48)
+        
+        # Clean subject for comparison (remove Re:, Fwd:, etc.)
+        clean_subject = re.sub(r'^(Re:|Fwd:|RV:|RE:|FW:)\s*', '', subject, flags=re.IGNORECASE).strip()
+        
+        result = await db.execute(
+            select(Ticket)
+            .where(
+                and_(
+                    Ticket.reporter_email == sender_email,
+                    Ticket.created_at >= cutoff_time,
+                    Ticket.status.notin_([TicketStatus.CLOSED, TicketStatus.RESOLVED])
+                )
+            )
+            .order_by(Ticket.created_at.desc())
+            .limit(5)
+        )
+        recent_tickets = result.scalars().all()
+        
+        # Check if any recent ticket has a similar subject
+        for ticket in recent_tickets:
+            ticket_subject_clean = re.sub(r'^(Re:|Fwd:|RV:|RE:|FW:)\s*', '', ticket.subject or '', flags=re.IGNORECASE).strip()
+            # Check if subjects match (ignoring case and Re:/Fwd: prefixes)
+            if clean_subject.lower() == ticket_subject_clean.lower():
+                existing_ticket = ticket
+                logger.info("Found existing ticket via same sender + subject: %s", existing_ticket.ticket_code)
+                break
+            # Also check if one subject contains the other (for partial matches)
+            if len(clean_subject) > 10 and len(ticket_subject_clean) > 10:
+                if clean_subject.lower() in ticket_subject_clean.lower() or ticket_subject_clean.lower() in clean_subject.lower():
+                    existing_ticket = ticket
+                    logger.info("Found existing ticket via subject similarity: %s", existing_ticket.ticket_code)
+                    break
     
     if existing_ticket:
         # This is a reply to an existing ticket
