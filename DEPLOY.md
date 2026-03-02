@@ -38,19 +38,19 @@ ACME_EMAIL=tu@email.com
 # Database
 DB_PASSWORD=tu_password_seguro_aqui
 
-# IMAP
+# IMAP (for receiving emails - keep Gmail for now)
 IMAP_HOST=imap.gmail.com
 IMAP_PORT=993
-IMAP_USER=fincas.madrid.incidencias@gmail.com
+IMAP_USER=your-email@gmail.com
 IMAP_PASSWORD=tu-app-password
 
-# SMTP  
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=fincas.madrid.incidencias@gmail.com
-SMTP_PASSWORD=tu-app-password
-FROM_EMAIL=fincas.madrid.incidencias@gmail.com
-FROM_NAME=Administración de Fincas
+# Email Provider (Resend recommended)
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=re_xxxxxxxxxxxx
+
+# From address (verified domain in Resend)
+FROM_EMAIL=incidencias@adminsavia.com
+FROM_NAME=AdminSavia
 
 # App
 POLL_INTERVAL_SECONDS=60

@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual de Interacciones de Usuario - Sistema de Gestión de Incidencias</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+        }
+        
+        h1 {
+            color: #1a5f7a;
+            border-bottom: 3px solid #1a5f7a;
+            padding-bottom: 10px;
+            page-break-after: avoid;
+        }
+        
+        h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+            margin-top: 30px;
+            page-break-after: avoid;
+        }
+        
+        h3 {
+            color: #34495e;
+            margin-top: 25px;
+            page-break-after: avoid;
+        }
+        
+        .header-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        
+        .header-info p {
+            margin: 5px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 0.9em;
+            page-break-inside: avoid;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .code-block {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.85em;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            margin: 15px 0;
+            page-break-inside: avoid;
+        }
+        
+        .diagram {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.8em;
+            overflow-x: auto;
+            white-space: pre;
+            margin: 15px 0;
+            border: 1px solid #ddd;
+            page-break-inside: avoid;
+        }
+        
+        .highlight {
+            background: #fff3cd;
+            padding: 10px;
+            border-left: 4px solid #ffc107;
+            margin: 15px 0;
+        }
+        
+        .success {
+            background: #d4edda;
+            padding: 10px;
+            border-left: 4px solid #28a745;
+            margin: 15px 0;
+        }
+        
+        .info {
+            background: #d1ecf1;
+            padding: 10px;
+            border-left: 4px solid #17a2b8;
+            margin: 15px 0;
+        }
+        
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+        
+        li {
+            margin: 5px 0;
+        }
+        
+        .page-break {
+            page-break-before: always;
+        }
+        
+        .toc {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .toc h3 {
+            margin-top: 0;
+        }
+        
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .toc li {
+            padding: 5px 0;
+            border-bottom: 1px dotted #ccc;
+        }
+        
+        .toc a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        
+        .emoji {
+            font-size: 1.1em;
+        }
+        
+        @media print {
+            body {
+                padding: 0;
+            }
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>🏢 Sistema de Gestión de Incidencias de Fincas</h1>
+    <h2 style="border: none; color: #666;">Manual de Interacciones de Usuario</h2>
+    
+    <div class="header-info">
+        <p><strong>Versión:</strong> 1.0</p>
+        <p><strong>Fecha:</strong> Febrero 2026</p>
+        <p><strong>Documento:</strong> Guía de uso para vecinos y propietarios</p>
+    </div>
+
+    <div class="toc">
+        <h3>📑 Índice de Contenidos</h3>
+        <ul>
+            <li>1. Introducción</li>
+            <li>2. Canal WhatsApp</li>
+            <li>3. Formulario Web Público</li>
+            <li>4. Canal Email</li>
+            <li>5. Consulta de Estado</li>
+            <li>6. Estados de las Incidencias</li>
+            <li>7. Notificaciones Proactivas</li>
+            <li>8. Preguntas Frecuentes</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>1. Introducción</h2>
+    
+    <p>Este documento describe las diferentes formas en que los usuarios (vecinos/propietarios) pueden interactuar con el sistema de gestión de incidencias de administración de fincas.</p>
+    
+    <div class="info">
+        <strong>El sistema ofrece tres canales principales de comunicación:</strong>
+        <ol>
+            <li><strong>WhatsApp</strong> - Canal conversacional con Inteligencia Artificial</li>
+            <li><strong>Formulario Web</strong> - Formulario público online accesible 24/7</li>
+            <li><strong>Email</strong> - Integración con correo electrónico</li>
+        </ol>
+    </div>
+
+    <h2>2. Canal WhatsApp</h2>
+
+    <h3>2.1 Descripción General</h3>
+    <p>Los usuarios pueden reportar incidencias y consultar el estado de sus tickets enviando mensajes de WhatsApp al número configurado de la administración.</p>
+    
+    <div class="highlight">
+        <strong>💡 Característica principal:</strong> El sistema utiliza <strong>Inteligencia Artificial</strong> para entender la intención del usuario y responder de forma conversacional, sin necesidad de seguir comandos específicos.
+    </div>
+
+    <h3>2.2 Intenciones Detectadas Automáticamente</h3>
+    
+    <table>
+        <tr>
+            <th>Intención</th>
+            <th>Descripción</th>
+            <th>Ejemplo de mensaje</th>
+        </tr>
+        <tr>
+            <td><strong>GREETING</strong></td>
+            <td>Saludo simple</td>
+            <td>"Hola", "Buenos días"</td>
+        </tr>
+        <tr>
+            <td><strong>NEW_INCIDENT</strong></td>
+            <td>Reportar un problema</td>
+            <td>"La luz del portal no funciona"</td>
+        </tr>
+        <tr>
+            <td><strong>CHECK_STATUS</strong></td>
+            <td>Consultar estado de incidencias</td>
+            <td>"¿Cómo va mi incidencia?", "Estado"</td>
+        </tr>
+        <tr>
+            <td><strong>PROVIDE_INFO</strong></td>
+            <td>Proporcionar información solicitada</td>
+            <td>"Mi dirección es Calle Mayor 15"</td>
+        </tr>
+        <tr>
+            <td><strong>CONFIRM_DATA</strong></td>
+            <td>Confirmar datos correctos</td>
+            <td>"Sí, correcto", "Ok"</td>
+        </tr>
+        <tr>
+            <td><strong>OFF_TOPIC</strong></td>
+            <td>Pregunta no relacionada</td>
+            <td>Preguntas sobre clima, política, etc.</td>
+        </tr>
+    </table>
+
+    <h3>2.3 Flujo de Reportar Nueva Incidencia</h3>
+    
+    <div class="diagram">
+┌─────────────────────────────────────────────────────────────┐
+│                    USUARIO ENVÍA MENSAJE                     │
+│         "Tengo una fuga de agua en el baño"                 │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              IA DETECTA INTENCIÓN: NEW_INCIDENT              │
+│         ✓ Extrae descripción del problema                    │
+│         ✓ Clasifica categoría (WATER/Fontanería)            │
+│         ✓ Determina prioridad                                │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 SE CREA TICKET (INC-XXXXXX)                  │
+│         • Estado: NEW o NEEDS_INFO                           │
+│         • Canal: WHATSAPP                                    │
+└─────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+┌─────────────────────────┐     ┌─────────────────────────┐
+│    INFO COMPLETA        │     │   FALTA INFORMACIÓN     │
+│                         │     │                         │
+│ ✅ Se notifica al       │     │ ⚠️ Se solicita:         │
+│    proveedor            │     │   • Dirección           │
+│                         │     │   • Piso/Puerta         │
+│ ✅ Usuario recibe       │     │                         │
+│    confirmación         │     │ → Usuario responde      │
+└─────────────────────────┘     └─────────────────────────┘
+    </div>
+
+    <div class="page-break"></div>
+
+    <h3>2.4 Mensajes de Respuesta del Sistema</h3>
+
+    <h4>Mensaje de Bienvenida</h4>
+    <p>Cuando el usuario envía un saludo, recibe:</p>
+    
+    <div class="code-block">👋 <strong>¡Hola [nombre]!</strong>
+
+Soy el asistente de <strong>Administración de Fincas</strong>. Puedo ayudarte con:
+
+📝 <strong>Reportar una incidencia</strong>
+   Cuéntame el problema (ej: "no funciona la luz del portal")
+
+📊 <strong>Consultar estado</strong> de tus incidencias abiertas
+   Escribe "estado" o "mis incidencias"
+
+❓ <strong>Ayuda</strong>
+   Escribe "ayuda" para ver más opciones
+
+¿En qué puedo ayudarte?</div>
+
+    <h4>Incidencia Registrada Correctamente</h4>
+    
+    <div class="code-block">✅ <strong>INCIDENCIA REGISTRADA CORRECTAMENTE</strong>
+
+📋 <strong>Código de seguimiento:</strong> INC-XXXXXX
+
+📝 <strong>Resumen del problema:</strong>
+[descripción generada por IA]
+
+🏷️ <strong>Categoría:</strong> [Fontanería/Electricidad/etc.]
+📍 <strong>Ubicación:</strong> [dirección] ([piso/puerta])
+
+━━━━━━━━━━━━━━━━━━━━━━
+✔️ Hemos notificado al técnico especializado.
+
+🔔 <strong>Le informaremos cuando la incidencia esté solucionada.</strong>
+
+💾 <strong>Guarde el código INC-XXXXXX</strong> para consultar el estado.</div>
+
+    <h4>Solicitud de Información Adicional</h4>
+    
+    <div class="code-block">📋 <strong>INCIDENCIA RECIBIDA</strong>
+Código: <strong>INC-XXXXXX</strong>
+
+📝 <strong>Hemos entendido que su problema es:</strong>
+"[resumen del problema]"
+
+✅ <strong>Sus datos registrados:</strong>
+👤 Nombre: [nombre]
+📱 Teléfono: [teléfono]
+
+━━━━━━━━━━━━━━━━━━━━━━
+⚠️ <strong>Para poder gestionar su incidencia necesitamos:</strong>
+
+• Dirección del edificio (Ej: Calle Mayor 15)
+• Piso y puerta (Ej: 3º A)
+
+📩 Por favor, indíquenos estos datos.</div>
+
+    <h4>Notificación de Cierre</h4>
+    <p>Cuando una incidencia se resuelve:</p>
+    
+    <div class="code-block">✅ <strong>INCIDENCIA RESUELTA</strong>
+
+📋 <strong>Código:</strong> INC-XXXXXX
+📝 <strong>Asunto:</strong> [asunto del ticket]
+
+¡Su incidencia ha sido solucionada!
+
+Si tiene alguna duda o el problema persiste, responda a este mensaje.
+
+Gracias por su paciencia. 🙏</div>
+
+    <h3>2.5 Prevención de Duplicados</h3>
+    
+    <div class="info">
+        <strong>ℹ️ Sistema Inteligente:</strong> El sistema incluye lógica para evitar crear múltiples tickets por la misma incidencia:
+        <ul>
+            <li><strong>Ventana de 2 horas:</strong> Los mensajes dentro de 2 horas de un ticket activo se asocian automáticamente al mismo ticket</li>
+            <li><strong>Detección IA:</strong> Se usa Inteligencia Artificial para determinar si un mensaje es sobre un problema nuevo o el mismo</li>
+            <li><strong>Palabras clave:</strong> Detecta frases como "otro problema", "nueva incidencia" para crear tickets separados</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>3. Formulario Web Público</h2>
+
+    <h3>3.1 Acceso</h3>
+    <p><strong>URL:</strong> <code>https://[dominio]/reportar</code></p>
+
+    <h3>3.2 Campos del Formulario</h3>
+
+    <h4>Información del Reportante</h4>
+    <table>
+        <tr>
+            <th>Campo</th>
+            <th>Obligatorio</th>
+            <th>Descripción</th>
+        </tr>
+        <tr>
+            <td>Nombre completo</td>
+            <td>✅ Sí</td>
+            <td>Nombre del vecino/propietario</td>
+        </tr>
+        <tr>
+            <td>Email</td>
+            <td>✅ Sí</td>
+            <td>Para comunicaciones y seguimiento</td>
+        </tr>
+        <tr>
+            <td>Teléfono</td>
+            <td>✅ Sí</td>
+            <td>Para contacto directo</td>
+        </tr>
+    </table>
+
+    <h4>Información de Ubicación</h4>
+    <table>
+        <tr>
+            <th>Campo</th>
+            <th>Obligatorio</th>
+            <th>Descripción</th>
+        </tr>
+        <tr>
+            <td>Comunidad</td>
+            <td>No</td>
+            <td>Nombre de la comunidad de propietarios</td>
+        </tr>
+        <tr>
+            <td>Dirección</td>
+            <td>No</td>
+            <td>Dirección del edificio</td>
+        </tr>
+        <tr>
+            <td>Piso/Puerta</td>
+            <td>No</td>
+            <td>Ubicación específica</td>
+        </tr>
+    </table>
+
+    <h4>Información de la Incidencia</h4>
+    <table>
+        <tr>
+            <th>Campo</th>
+            <th>Obligatorio</th>
+            <th>Descripción</th>
+        </tr>
+        <tr>
+            <td>Asunto</td>
+            <td>✅ Sí</td>
+            <td>Descripción breve del problema</td>
+        </tr>
+        <tr>
+            <td>Descripción</td>
+            <td>✅ Sí</td>
+            <td>Detalles completos</td>
+        </tr>
+        <tr>
+            <td>Categoría</td>
+            <td>No</td>
+            <td>Tipo de incidencia (se auto-detecta si no se indica)</td>
+        </tr>
+        <tr>
+            <td>Urgencia</td>
+            <td>No</td>
+            <td>Nivel de urgencia</td>
+        </tr>
+    </table>
+
+    <h3>3.3 Categorías Disponibles</h3>
+    <table>
+        <tr>
+            <th>Código</th>
+            <th>Descripción</th>
+            <th>Ejemplos</th>
+        </tr>
+        <tr>
+            <td>WATER</td>
+            <td>Fontanería</td>
+            <td>Fugas, atascos, problemas de agua</td>
+        </tr>
+        <tr>
+            <td>ELEVATOR</td>
+            <td>Ascensor</td>
+            <td>Averías, paradas, ruidos</td>
+        </tr>
+        <tr>
+            <td>ELECTRICITY</td>
+            <td>Electricidad</td>
+            <td>Cortes, fallos de luz, enchufes</td>
+        </tr>
+        <tr>
+            <td>GARAGE_DOOR</td>
+            <td>Puerta de garaje</td>
+            <td>No abre/cierra, ruidos</td>
+        </tr>
+        <tr>
+            <td>CLEANING</td>
+            <td>Limpieza</td>
+            <td>Zonas sucias, basura</td>
+        </tr>
+        <tr>
+            <td>SECURITY</td>
+            <td>Seguridad</td>
+            <td>Cerraduras, portales, cámaras</td>
+        </tr>
+        <tr>
+            <td>OTHER</td>
+            <td>Otros</td>
+            <td>Cualquier otra incidencia</td>
+        </tr>
+    </table>
+
+    <h3>3.4 Niveles de Prioridad</h3>
+    <table>
+        <tr>
+            <th>Nivel</th>
+            <th>Criterio</th>
+        </tr>
+        <tr>
+            <td><strong>URGENT</strong></td>
+            <td>Personas atrapadas, inundación activa, emergencia de seguridad</td>
+        </tr>
+        <tr>
+            <td><strong>HIGH</strong></td>
+            <td>Afecta a varios vecinos, fugas contenidas, ascensor averiado</td>
+        </tr>
+        <tr>
+            <td><strong>MEDIUM</strong></td>
+            <td>Puede esperar 24-48h</td>
+        </tr>
+        <tr>
+            <td><strong>LOW</strong></td>
+            <td>Problemas menores, mantenimiento preventivo</td>
+        </tr>
+    </table>
+
+    <div class="page-break"></div>
+
+    <h2>4. Canal Email</h2>
+
+    <h3>4.1 Funcionamiento</h3>
+    <p>Los usuarios pueden enviar emails a la dirección de la administración. El sistema:</p>
+    <ol>
+        <li>Recibe el email mediante webhook/polling</li>
+        <li>Analiza el contenido con Inteligencia Artificial</li>
+        <li>Crea automáticamente un ticket</li>
+        <li>Asocia al reporter existente o crea uno nuevo</li>
+        <li>Responde automáticamente si es necesario</li>
+    </ol>
+
+    <h3>4.2 Notificaciones por Email</h3>
+    <p>El sistema envía emails automáticos en los siguientes casos:</p>
+    <ul>
+        <li><strong>Confirmación de recepción:</strong> Cuando se crea un ticket</li>
+        <li><strong>Solicitud de información:</strong> Si faltan datos necesarios</li>
+        <li><strong>Cierre de incidencia:</strong> Cuando se resuelve el problema</li>
+    </ul>
+
+    <h2>5. Consulta de Estado</h2>
+
+    <h3>5.1 Por WhatsApp</h3>
+    <p><strong>Comandos disponibles:</strong></p>
+    <ul>
+        <li>"estado"</li>
+        <li>"mis incidencias"</li>
+        <li>"cómo va mi incidencia"</li>
+        <li>[código de ticket] (ej: INC-ABC123)</li>
+    </ul>
+
+    <p><strong>Respuesta ejemplo:</strong></p>
+    <div class="code-block">📊 <strong>Tus incidencias abiertas (2):</strong>
+
+1. 🆕 <strong>INC-ABC123</strong>
+   Fuga de agua en el baño
+   Estado: <em>Pendiente</em>
+
+2. 🔧 <strong>INC-DEF456</strong>
+   Luz del portal no funciona
+   Estado: <em>En proceso</em>
+
+Para más detalles de una incidencia, escribe su código.</div>
+
+    <h3>5.2 Detalle de Incidencia Específica</h3>
+    <div class="code-block">📋 <strong>Incidencia INC-ABC123</strong>
+
+📝 <strong>Problema:</strong> Fuga de agua en el baño
+
+📊 <strong>Estado:</strong> 🔧 En proceso de reparación
+📍 <strong>Ubicación:</strong> Calle Mayor 15 (3º A)
+📅 <strong>Reportada:</strong> 24/02/2026 10:30</div>
+
+    <div class="page-break"></div>
+
+    <h2>6. Estados de las Incidencias</h2>
+
+    <table>
+        <tr>
+            <th>Estado</th>
+            <th>Código</th>
+            <th>Descripción</th>
+        </tr>
+        <tr>
+            <td>🆕 Nueva</td>
+            <td>NEW</td>
+            <td>Recién creada, pendiente de asignación</td>
+        </tr>
+        <tr>
+            <td>⏳ Necesita Info</td>
+            <td>NEEDS_INFO</td>
+            <td>Esperando datos del reportante</td>
+        </tr>
+        <tr>
+            <td>🔍 En Validación</td>
+            <td>VALIDATING</td>
+            <td>Verificando información</td>
+        </tr>
+        <tr>
+            <td>📤 Asignada</td>
+            <td>DISPATCHED</td>
+            <td>Técnico/proveedor asignado</td>
+        </tr>
+        <tr>
+            <td>📅 Programada</td>
+            <td>SCHEDULED</td>
+            <td>Visita programada</td>
+        </tr>
+        <tr>
+            <td>🔧 En Proceso</td>
+            <td>IN_PROGRESS</td>
+            <td>Trabajo en curso</td>
+        </tr>
+        <tr>
+            <td>❓ Pendiente Confirmación</td>
+            <td>NEEDS_CONFIRMATION</td>
+            <td>Esperando confirmación de resolución</td>
+        </tr>
+        <tr>
+            <td>📄 Esperando Factura</td>
+            <td>WAITING_INVOICE</td>
+            <td>Trabajo terminado, pendiente factura</td>
+        </tr>
+        <tr>
+            <td>✅ Cerrada</td>
+            <td>CLOSED</td>
+            <td>Incidencia resuelta y cerrada</td>
+        </tr>
+        <tr>
+            <td>⚠️ Escalada</td>
+            <td>ESCALATED</td>
+            <td>Requiere atención especial</td>
+        </tr>
+    </table>
+
+    <h2>7. Notificaciones Proactivas</h2>
+
+    <h3>7.1 Al Reportante</h3>
+    <div class="success">
+        <strong>✅ Cierre de incidencia:</strong> Notificación automática por el canal original (WhatsApp o Email) cuando se cierra un ticket.
+    </div>
+
+    <h3>7.2 Al Proveedor</h3>
+    <ul>
+        <li><strong>Nueva incidencia asignada:</strong> Email con detalles del problema</li>
+        <li><strong>Información actualizada:</strong> Cuando el reportante proporciona más datos</li>
+    </ul>
+
+    <h2>8. Preguntas Frecuentes (FAQ)</h2>
+
+    <h3>¿Cómo sé que mi incidencia fue recibida?</h3>
+    <p>Recibirá una confirmación inmediata con un código de seguimiento (INC-XXXXXX) por el mismo canal que usó para reportarla.</p>
+
+    <h3>¿Puedo adjuntar fotos?</h3>
+    <p>Actualmente el sistema no procesa archivos adjuntos por WhatsApp. Se recomienda describir el problema detalladamente.</p>
+
+    <h3>¿Cómo consulto el estado de mi incidencia?</h3>
+    <ul>
+        <li><strong>WhatsApp:</strong> Escriba "estado" o el código de su incidencia</li>
+        <li><strong>Dashboard:</strong> Contacte con su administrador</li>
+    </ul>
+
+    <h3>¿Me avisarán cuando se solucione?</h3>
+    <p><strong>Sí</strong>, recibirá una notificación automática por el mismo canal que usó para reportar (WhatsApp o Email).</p>
+
+    <h3>¿Qué hago si el problema persiste después del cierre?</h3>
+    <p>Responda al mensaje de cierre indicando que el problema continúa. Se reabrirá o creará un nuevo ticket según corresponda.</p>
+
+    <hr>
+
+    <div class="diagram" style="text-align: center; font-family: 'Segoe UI', sans-serif;">
+                    ┌─────────────────┐
+                    │    USUARIOS     │
+                    │  (Vecinos/Prop) │
+                    └────────┬────────┘
+                             │
+            ┌────────────────┼────────────────┐
+            │                │                │
+            ▼                ▼                ▼
+    ┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+    │   WhatsApp    │ │  Web Form     │ │    Email      │
+    │   (Twilio)    │ │  /reportar    │ │  (Resend/SG)  │
+    └───────┬───────┘ └───────┬───────┘ └───────┬───────┘
+            │                 │                 │
+            └────────────────┬┴─────────────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │   Sistema IA    │
+                    │  (OpenAI GPT)   │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │     TICKETS     │
+                    │   (PostgreSQL)  │
+                    └────────┬────────┘
+                             │
+                    ┌────────┴────────┐
+                    ▼                 ▼
+           ┌───────────────┐ ┌───────────────┐
+           │  PROVEEDORES  │ │   DASHBOARD   │
+           └───────────────┘ └───────────────┘
+    </div>
+
+    <hr>
+    <p style="text-align: center; color: #666; font-size: 0.9em;">
+        <em>Sistema de Gestión de Incidencias de Fincas v1.0 - Febrero 2026</em><br>
+        <strong>Para imprimir como PDF:</strong> Ctrl+P → Guardar como PDF
+    </p>
+
+</body>
+</html>

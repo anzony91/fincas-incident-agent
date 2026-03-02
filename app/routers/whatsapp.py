@@ -81,7 +81,7 @@ async def whatsapp_webhook(
         # Return user-friendly error
         error_twiml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Message>Lo sentimos, ha ocurrido un error procesando su mensaje. Por favor, inténtelo de nuevo más tarde o contacte con fincas.madrid.incidencias@gmail.com</Message>
+    <Message>Lo sentimos, ha ocurrido un error procesando su mensaje. Por favor, inténtelo de nuevo más tarde o contacte con incidencias@adminsavia.com</Message>
 </Response>"""
         return Response(content=error_twiml, media_type="application/xml")
 
