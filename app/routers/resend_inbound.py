@@ -379,7 +379,9 @@ async def _add_email_to_ticket(
     in_reply_to: Optional[str],
     references: Optional[str],
 ):
-    """Add an email as a reply to an existing ticket"""
+    """Add an email as a reply to an existing ticket and update ticket info"""
+    logger.info("Adding email reply to existing ticket %s", ticket.ticket_code)
+    
     # Store email
     email_record = Email(
         ticket_id=ticket.id,
@@ -396,23 +398,100 @@ async def _add_email_to_ticket(
     )
     db.add(email_record)
     
-    # If ticket was waiting for info and user replied, analyze the response
-    if ticket.status == TicketStatus.NEEDS_INFO:
-        ai_agent = AIAgentService()
-        analysis = await ai_agent.analyze_incident(
-            subject=ticket.subject,
-            body=f"{ticket.description}\n\n[RESPUESTA DEL USUARIO]\n{text_body}",
-            sender_email=ticket.reporter_email,
-            sender_name=sender_name or ticket.reporter_name,
-        )
+    # Append new message to ticket description
+    separator = "\n\n--- Respuesta del usuario ---\n"
+    if ticket.description:
+        ticket.description = f"{ticket.description}{separator}{text_body}"
+    else:
+        ticket.description = text_body
+    
+    # Analyze the combined information with AI
+    ai_agent = AIAgentService()
+    combined_text = f"{ticket.subject}\n\n{ticket.description}"
+    
+    analysis = await ai_agent.analyze_incident(
+        subject=ticket.subject,
+        body=combined_text,
+        sender_email=ticket.reporter_email,
+        sender_name=sender_name or ticket.reporter_name,
+    )
+    
+    logger.info("AI analysis result - has_complete_info: %s, extracted_info: %s", 
+                analysis.has_complete_info, analysis.extracted_info)
+    
+    # Update ticket fields from extracted info
+    if analysis.extracted_info:
+        extracted = analysis.extracted_info
         
+        # Update reporter name if found and current is just email prefix
+        if extracted.get('reporter_name') and (
+            not ticket.reporter_name or 
+            '@' in ticket.reporter_name or 
+            ticket.reporter_name == ticket.reporter_email.split('@')[0]
+        ):
+            ticket.reporter_name = extracted['reporter_name']
+            logger.info("Updated reporter_name: %s", ticket.reporter_name)
+        
+        # Update phone if found
+        if extracted.get('reporter_phone') and not ticket.reporter_phone:
+            ticket.reporter_phone = extracted['reporter_phone']
+            logger.info("Updated reporter_phone: %s", ticket.reporter_phone)
+        
+        # Update address if found
+        if extracted.get('address') and not ticket.address:
+            ticket.address = extracted['address']
+            logger.info("Updated address: %s", ticket.address)
+        
+        # Update location detail (floor/door/portal) if found
+        if extracted.get('location_detail') and not ticket.location_detail:
+            ticket.location_detail = extracted['location_detail']
+            logger.info("Updated location_detail: %s", ticket.location_detail)
+        
+        # Update community name if found
+        if extracted.get('community_name') and not ticket.community_name:
+            ticket.community_name = extracted['community_name']
+            logger.info("Updated community_name: %s", ticket.community_name)
+    
+    # Update AI context
+    ticket.ai_context = ticket.ai_context or {}
+    ticket.ai_context['last_analysis'] = {
+        "has_complete_info": analysis.has_complete_info,
+        "category": analysis.category.value if analysis.category else None,
+        "priority": analysis.priority.value if analysis.priority else None,
+        "missing_fields": analysis.missing_fields,
+        "extracted_info": analysis.extracted_info,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    
+    # Update status based on analysis
+    if ticket.status == TicketStatus.NEEDS_INFO:
         if analysis.has_complete_info:
             ticket.status = TicketStatus.NEW
-            # Create event
+            logger.info("Ticket %s status changed to NEW (info complete)", ticket.ticket_code)
+            
+            # Create event for status change
             event = Event(
                 ticket_id=ticket.id,
                 event_type="info_provided",
-                description="Información adicional recibida por email",
+                description="Información completa recibida por email. Ticket listo para procesar.",
+            )
+            db.add(event)
+            
+            # Notify provider since info is now complete
+            await db.commit()
+            await db.refresh(ticket)
+            
+            from app.services.email_service import EmailService
+            email_service = EmailService(db)
+            await email_service._notify_default_provider(ticket)
+            return
+        else:
+            # Still missing info - create event
+            missing = ", ".join(analysis.missing_fields[:3]) if analysis.missing_fields else "información adicional"
+            event = Event(
+                ticket_id=ticket.id,
+                event_type="email_reply",
+                description=f"Respuesta recibida. Aún falta: {missing}",
             )
             db.add(event)
     else:
@@ -420,7 +499,7 @@ async def _add_email_to_ticket(
         event = Event(
             ticket_id=ticket.id,
             event_type="email_reply",
-            description=f"Respuesta recibida del reportante",
+            description="Respuesta recibida del reportante",
         )
         db.add(event)
     
