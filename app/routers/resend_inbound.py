@@ -330,7 +330,7 @@ async def _process_incident_email(
                 and_(
                     Ticket.reporter_email == sender_email,
                     Ticket.created_at >= cutoff_time,
-                    Ticket.status.notin_([TicketStatus.CLOSED, TicketStatus.RESOLVED])
+                    Ticket.status.notin_([TicketStatus.CLOSED])
                 )
             )
             .order_by(Ticket.created_at.desc())
