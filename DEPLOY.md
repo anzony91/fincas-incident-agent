@@ -38,27 +38,36 @@ ACME_EMAIL=tu@email.com
 # Database
 DB_PASSWORD=tu_password_seguro_aqui
 
-# IMAP (for receiving emails - keep Gmail for now)
-IMAP_HOST=imap.gmail.com
-IMAP_PORT=993
-IMAP_USER=your-email@gmail.com
-IMAP_PASSWORD=tu-app-password
-
-# Email Provider (Resend recommended)
+# ===== EMAIL CONFIGURATION (Resend - RECOMMENDED) =====
+# Resend handles BOTH sending and receiving emails via webhook
+# No IMAP needed anymore!
 EMAIL_PROVIDER=resend
 RESEND_API_KEY=re_xxxxxxxxxxxx
+# Webhook secret from Resend dashboard (optional but recommended)
+RESEND_WEBHOOK_SECRET=whsec_xxxxxxxxxxxx
 
-# From address (verified domain in Resend)
+# From address (must be verified domain in Resend)
 FROM_EMAIL=incidencias@adminsavia.com
 FROM_NAME=AdminSavia
 
 # App
-POLL_INTERVAL_SECONDS=60
 DEBUG=false
 LOG_LEVEL=INFO
 ATTACHMENTS_PATH=/app/data/attachments
 EOF
 ```
+
+### Configuración de Resend Inbound (recibir emails)
+
+1. Ve a [Resend Dashboard](https://resend.com/webhooks)
+2. Crea un nuevo webhook:
+   - **Endpoint URL:** `https://tu-dominio.com/api/resend/webhook`
+   - **Events:** Selecciona `email.received`
+3. Copia el **Webhook Secret** y añádelo como `RESEND_WEBHOOK_SECRET`
+4. Configura los registros MX en tu dominio para que apunten a Resend:
+   - **MX Record:** `feedback-smtp.us-east-1.amazonses.com` (Priority: 10)
+   
+> **Nota:** Consulta la documentación de Resend para los registros MX actualizados según tu región.
 
 ## 3. Desplegar
 

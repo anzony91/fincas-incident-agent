@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.database import close_db, init_db
-from app.routers import emails, events, providers, tickets, dashboard, reporters, public, whatsapp
+from app.routers import emails, events, providers, tickets, dashboard, reporters, public, whatsapp, resend_inbound
 
 settings = get_settings()
 
@@ -29,11 +29,16 @@ async def lifespan(app: FastAPI):
     logger.info("Starting %s", settings.app_name)
     await init_db()
     
-    # Start email polling worker if configured
-    if settings.imap_user and settings.imap_password:
+    # Start email polling worker if using IMAP (not needed with Resend Inbound)
+    # Skip IMAP if using Resend as email provider (Resend Inbound handles incoming emails via webhook)
+    use_imap = settings.imap_user and settings.imap_password and settings.email_provider != "resend"
+    
+    if use_imap:
         from app.services.email_worker import start_email_worker
         await start_email_worker()
-        logger.info("Email worker started")
+        logger.info("Email worker started (IMAP polling)")
+    elif settings.email_provider == "resend":
+        logger.info("Using Resend Inbound for incoming emails (webhook at /api/resend/webhook)")
     else:
         logger.warning("IMAP credentials not configured - email worker disabled")
     
@@ -41,7 +46,7 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down %s", settings.app_name)
-    if settings.imap_user and settings.imap_password:
+    if use_imap:
         from app.services.email_worker import stop_email_worker
         await stop_email_worker()
     await close_db()
@@ -72,6 +77,7 @@ app.include_router(events.router, prefix="/api/events", tags=["Events"])
 app.include_router(dashboard.router)
 app.include_router(public.router)  # Public routes for incident form
 app.include_router(whatsapp.router, prefix="/api/whatsapp", tags=["WhatsApp"])
+app.include_router(resend_inbound.router, prefix="/api/resend", tags=["Resend Inbound"])
 
 
 @app.get("/", tags=["Health"])

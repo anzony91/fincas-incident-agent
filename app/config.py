@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     # Resend API (alternative to SMTP - recommended for cloud deployments)
     # Get API key from https://resend.com - 3000 emails/month free
     resend_api_key: str = ""
+    # Webhook secret for verifying Resend Inbound webhooks (optional but recommended)
+    resend_webhook_secret: str = ""
     
     # SendGrid API (another alternative - 100 emails/day free)
     # Get API key from https://sendgrid.com
